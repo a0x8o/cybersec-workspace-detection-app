@@ -361,7 +361,7 @@ def get_geoip_db_path(db_type='city'):
         widget_path = dbutils.widgets.get(widget_name)
         if widget_path and widget_path.strip():
             return widget_path.strip()
-    except:
+    except Exception:
         pass
 
     # Try Spark config
@@ -369,7 +369,7 @@ def get_geoip_db_path(db_type='city'):
         config_path = spark.conf.get(config_key, None)
         if config_path and config_path.strip():
             return config_path.strip()
-    except:
+    except Exception:
         pass
 
     # Not configured - disabled by default
@@ -560,7 +560,7 @@ def run_all_detections(
                 paths = [
                     obj.path for obj in notebooks
                     if obj.path and (obj.path.endswith(".py") or obj.path.endswith(".ipynb") or
-                                   obj.object_type and obj.object_type.name == "NOTEBOOK")
+                                   (obj.object_type and obj.object_type.name == "NOTEBOOK"))
                 ]
                 notebook_paths.extend(paths)
                 print(f"  Found {len(paths)} detections in {subdir}/")

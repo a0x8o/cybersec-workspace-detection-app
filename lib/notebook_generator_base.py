@@ -8,7 +8,7 @@
 # MAGIC - `parse_detection_file(file_path)` - Parse YAML metadata and function code
 # MAGIC - `discover_detections(base_path=None, detection_list=None)` - Scan and load detections
 # MAGIC - `format_time_range(days=None, hours=None)` - Time range formatting
-# MAGIC - `generate_detection_code(detection_name, config, earliest, latest, is_binary=False, user_email=None)` - Generate detection execution code
+# MAGIC - `generate_detection_code(detection_name, config, earliest, latest, is_event_based=False, user_email=None)` - Generate detection execution code
 # MAGIC - `generate_threat_model_notebook(threat_model, threat_model_title, threat_model_description, all_detections, time_range_days, binary_time_range_hours)` - Create complete threat model notebook
 
 # COMMAND ----------
@@ -187,7 +187,7 @@ def parse_detection_file(file_path: str, user_email: Optional[str] = None) -> Di
     detection_info = metadata.get('dscc', {}).get('detection', {})
 
     # Determine if this is an event-based or behavioral detection based on file path
-    is_binary = '/event-based/' in file_path
+    is_event_based = '/event-based/' in file_path
 
     return {
         "file_path": file_path,
@@ -201,7 +201,7 @@ def parse_detection_file(file_path: str, user_email: Optional[str] = None) -> Di
         "severity": detection_info.get('severity', '').strip(),
         "fidelity": detection_info.get('fidelity', '').strip(),
         "category": detection_info.get('category', '').strip(),
-        "is_binary": is_binary,
+        "is_event_based": is_event_based,
         "params": params,
         "defaults": defaults,
         "metadata": metadata
@@ -297,7 +297,7 @@ def format_time_range(days: int = None, hours: int = None) -> Tuple[str, str]:
 
     Args:
         days: Number of days to look back (for behavioral detections)
-        hours: Number of hours to look back (for binary detections)
+        hours: Number of hours to look back (for event-based detections)
 
     Returns:
         Tuple of (earliest, latest) as formatted strings
@@ -333,7 +333,7 @@ def format_time_range(days: int = None, hours: int = None) -> Tuple[str, str]:
 # COMMAND ----------
 
 def generate_detection_code(detection_name: str, config: Dict, earliest: str, latest: str,
-                           is_binary: bool = False, user_email: Optional[str] = None) -> str:
+                           is_event_based: bool = False, user_email: Optional[str] = None) -> str:
     """Generate PySpark code for a specific detection.
 
     Args:
@@ -341,7 +341,7 @@ def generate_detection_code(detection_name: str, config: Dict, earliest: str, la
         config: Detection configuration dictionary
         earliest: Start of time range
         latest: End of time range
-        is_binary: Whether this is a binary detection (affects time window handling)
+        is_event_based: Whether this is an event-based detection (vs behavioral)
         user_email: Optional user email for user-specific filtering
 
     Returns:
@@ -410,7 +410,7 @@ def generate_threat_model_notebook(threat_model: str, threat_model_title: str,
         threat_model_description: Description of what this threat model covers
         all_detections: Dictionary of all loaded detections
         time_range_days: Time window for behavioral detections
-        binary_time_range_hours: Time window for binary detections
+        binary_time_range_hours: Time window for event-based detections (hours)
 
     Returns:
         Complete notebook content as string
@@ -422,14 +422,14 @@ def generate_threat_model_notebook(threat_model: str, threat_model_title: str,
 
     # Calculate time ranges
     behavioral_earliest, behavioral_latest = format_time_range(days=time_range_days)
-    binary_earliest, binary_latest = format_time_range(hours=binary_time_range_hours)
+    event_based_earliest, event_based_latest = format_time_range(hours=binary_time_range_hours)
 
     # Separate detections by type
-    binary_detections = [(name, config) for name, config in all_detections.items() if config.get('is_binary', False)]
-    behavioral_detections = [(name, config) for name, config in all_detections.items() if not config.get('is_binary', False)]
+    event_based_detections = [(name, config) for name, config in all_detections.items() if config.get('is_event_based', False)]
+    behavioral_detections = [(name, config) for name, config in all_detections.items() if not config.get('is_event_based', False)]
 
     # Sort detections alphabetically by name
-    binary_detections = sorted(binary_detections, key=lambda x: x[1].get("name", x[0]))
+    event_based_detections = sorted(event_based_detections, key=lambda x: x[1].get("name", x[0]))
     behavioral_detections = sorted(behavioral_detections, key=lambda x: x[1].get("name", x[0]))
 
     # Define magic command prefix as a variable to avoid confusion
@@ -452,9 +452,9 @@ def generate_threat_model_notebook(threat_model: str, threat_model_title: str,
 {magic} {threat_model_description}
 {magic}
 {magic} **Analysis Parameters:**
-{magic} - **Binary Detections Time Window:** {binary_time_range_hours} hours ({binary_earliest} to {binary_latest})
+{magic} - **Event-Based Detections Time Window:** {binary_time_range_hours} hours ({event_based_earliest} to {event_based_latest})
 {magic} - **Behavioral Detections Time Window:** {time_range_days} days ({behavioral_earliest} to {behavioral_latest})
-{magic} - **Total Detections:** {len(all_detections)} ({len(binary_detections)} binary, {len(behavioral_detections)} behavioral)
+{magic} - **Total Detections:** {len(all_detections)} ({len(event_based_detections)} event-based, {len(behavioral_detections)} behavioral)
 {magic} - **Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 {command}
@@ -472,15 +472,15 @@ from pyspark.sql.functions import col, count, when
 from datetime import datetime, timedelta
 
 # Analysis parameters
-BINARY_EARLIEST = "{binary_earliest}"
-BINARY_LATEST = "{binary_latest}"
+EVENT_BASED_EARLIEST = "{event_based_earliest}"
+EVENT_BASED_LATEST = "{event_based_latest}"
 BEHAVIORAL_EARLIEST = "{behavioral_earliest}"
 BEHAVIORAL_LATEST = "{behavioral_latest}"
 TIME_RANGE_DAYS = {time_range_days}
-BINARY_TIME_RANGE_HOURS = {binary_time_range_hours}
+EVENT_BASED_TIME_RANGE_HOURS = {binary_time_range_hours}
 
 print(f"Threat Model: {threat_model_title}")
-print(f"Binary detection window: {{BINARY_EARLIEST}} to {{BINARY_LATEST}} ({binary_time_range_hours} hours)")
+print(f"Event-based detection window: {{EVENT_BASED_EARLIEST}} to {{EVENT_BASED_LATEST}} ({binary_time_range_hours} hours)")
 print(f"Behavioral detection window: {{BEHAVIORAL_EARLIEST}} to {{BEHAVIORAL_LATEST}} ({time_range_days} days)")
 print("=" * 80)
 
@@ -489,10 +489,10 @@ print("=" * 80)
 # Initialize summary statistics
 summary_stats = {{
     "threat_model": "{threat_model_title}",
-    "binary_time_range": f"{{BINARY_EARLIEST}} to {{BINARY_LATEST}}",
+    "event_based_time_range": f"{{EVENT_BASED_EARLIEST}} to {{EVENT_BASED_LATEST}}",
     "behavioral_time_range": f"{{BEHAVIORAL_EARLIEST}} to {{BEHAVIORAL_LATEST}}",
     "total_detections": {len(all_detections)},
-    "binary_detections": {len(binary_detections)},
+    "event_based_detections": {len(event_based_detections)},
     "behavioral_detections": {len(behavioral_detections)},
     "findings": 0,
     "detections_triggered": []
@@ -502,20 +502,20 @@ detection_triggered = False
 
 """
 
-    # Add binary detections section
-    if binary_detections:
+    # Add event-based detections section
+    if event_based_detections:
         notebook_content += f"""
 {command}
 
 {magic} %md
-{magic} ## Binary Detections (Immediate Alerts)
+{magic} ## Event-Based Detections (Immediate Alerts)
 {magic}
 {magic} High-confidence security events requiring immediate attention.
 {magic} **Time Window:** {binary_time_range_hours} hours
 
 """
 
-        for detection_name, config in binary_detections:
+        for detection_name, config in event_based_detections:
             display_name = _sanitize_for_markdown(config.get('name', detection_name.replace('_', ' ').title()))
 
             notebook_content += f"""
@@ -539,12 +539,12 @@ detection_triggered = False
 
 {command}
 
-{generate_detection_code(detection_name, config, binary_earliest, binary_latest, is_binary=True)}
+{generate_detection_code(detection_name, config, event_based_earliest, event_based_latest, is_event_based=True)}
 
 # Update summary statistics if detection triggered
 if detection_triggered:
     summary_stats["findings"] += 1
-    summary_stats["detections_triggered"].append("{display_name} (Binary)")
+    summary_stats["detections_triggered"].append("{display_name} (Event-Based)")
 
 """
 
@@ -585,7 +585,7 @@ if detection_triggered:
 
 {command}
 
-{generate_detection_code(detection_name, config, behavioral_earliest, behavioral_latest, is_binary=False)}
+{generate_detection_code(detection_name, config, behavioral_earliest, behavioral_latest, is_event_based=False)}
 
 # Update summary statistics if detection triggered
 if detection_triggered:
@@ -608,9 +608,9 @@ print("=" * 80)
 print("THREAT MODEL INVESTIGATION SUMMARY")
 print("=" * 80)
 print(f"Threat Model: {{summary_stats['threat_model']}}")
-print(f"Binary Detection Window: {{summary_stats['binary_time_range']}}")
+print(f"Event-Based Detection Window: {{summary_stats['event_based_time_range']}}")
 print(f"Behavioral Detection Window: {{summary_stats['behavioral_time_range']}}")
-print(f"Total Detections Analyzed: {{summary_stats['total_detections']}} ({{summary_stats['binary_detections']}} binary, {{summary_stats['behavioral_detections']}} behavioral)")
+print(f"Total Detections Analyzed: {{summary_stats['total_detections']}} ({{summary_stats['event_based_detections']}} event-based, {{summary_stats['behavioral_detections']}} behavioral)")
 print(f"Total Findings: {{summary_stats['findings']}}")
 print("-" * 80)
 

@@ -2,7 +2,7 @@
 # MAGIC %md
 # MAGIC # Beta - User Behavior Analysis Generator
 # MAGIC
-# MAGIC This notebook generates a new investigative notebook focused on the behavior of 
+# MAGIC This notebook generates a new investigative notebook focused on the behavior of
 # MAGIC a specific user across multiple security detections. The new notebook will be
 # MAGIC stored in the "generated" folder and the full path to the notebook will be printed below in Cell 13 and can be run to analyze the user's behavior.
 # MAGIC
@@ -40,247 +40,7 @@ print()
 
 # COMMAND ----------
 
-import os
-import re
-import yaml
-from datetime import datetime, timedelta
-from typing import Dict, Tuple, Any
-from pyspark.sql.functions import col
-from databricks.sdk import WorkspaceClient
-from databricks.sdk.service.workspace import ImportFormat, Language
-import io
-w = WorkspaceClient()
-
-
-def _sanitize_for_markdown(text: str) -> str:
-    """Sanitize text for safe embedding in generated notebook markdown cells."""
-    if not text:
-        return ""
-    text = text.replace("# MAGIC ", "").replace("#MAGIC ", "")
-    text = text.replace('"""', '').replace("'''", "")
-    text = re.sub(r'```\w*\n.*?```', '[code block removed]', text, flags=re.DOTALL)
-    return text.strip()
-
-
-def _sanitize_for_python_comment(text: str) -> str:
-    """Sanitize text for safe embedding in generated Python code comments."""
-    if not text:
-        return ""
-    return text.replace('\n', ' ').replace('\r', '').strip()[:200]
-
-# Get current notebook path (works on both classic compute and serverless)
-def get_notebook_path():
-    return dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
-
-def get_repo_root():
-    """Get the repository root path from the current notebook location."""
-    notebook_path = get_notebook_path()
-    # notebook_path is like: /Users/user@email.com/repo/base/notebooks/notebook_name
-    notebooks_dir = os.path.dirname(notebook_path)  # .../base/notebooks
-    base_dir = os.path.dirname(notebooks_dir)       # .../base
-    return os.path.dirname(base_dir)                # .../repo (root)
-
-cwd = get_repo_root()
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Dynamic Detection Discovery
-
-# COMMAND ----------
-
-def parse_detection_file(file_path: str) -> Dict[str, Any]:
-    """Parse a detection file to extract metadata and function information"""
-    file_path = re.sub(r'\.py$', '', file_path)
-    print(f"Parsing detection file: {file_path}")
-    try:
-        with w.workspace.download(file_path) as f:
-            content = f.read().decode()
-    except Exception as e:
-        print(f"Warning: Failed to download {file_path}: {e}")
-        return None
-    # Extract the YAML metadata from the markdown cell
-    yaml_match = re.search(r'```yaml\s*(.*?)```', content, re.DOTALL)
-    if not yaml_match:
-        print(f"Warning: No YAML metadata found in {file_path}")
-        return None
-    yaml_content = yaml_match.group(1).replace("# MAGIC ", "")
-    try:
-        metadata = yaml.safe_load(yaml_content)
-    except yaml.YAMLError as e:
-        print(f"Warning: Failed to parse YAML in {file_path}: {e}")
-        return None
-    
-    # Extract function definition and parameters
-    func_match = re.search(r'@detect.*?\ndef\s+(\w+)\s*\((.*?)\):', content, re.DOTALL)
-    if not func_match:
-        print(f"Warning: No detection function found in {file_path}")
-        return None
-    
-    function_name = func_match.group(1)
-    params_str = func_match.group(2)
-    
-    full_function_match = re.search(r'(@detect.*?)# COMMAND -------', content, re.DOTALL)
-    if not full_function_match:
-        print(f"Warning: No full function found in {file_path}")
-        return None
-    full_function = full_function_match.group(1)
-    # Use variable reference (USER_EMAIL) instead of interpolating raw email to prevent injection
-    user_replaced = False
-    if 'spark.table("system.access.audit")' in full_function:
-        full_function = full_function.replace('spark.table("system.access.audit")', 'spark.table("system.access.audit").filter(col("user_identity.email") == lit(USER_EMAIL))')
-        user_replaced = True
-    if 'spark.table("system.query.history")' in full_function:
-        full_function = full_function.replace('spark.table("system.query.history")', 'spark.table("system.query.history").filter(col("executed_as") == lit(USER_EMAIL))')
-        user_replaced = True
-    if not user_replaced:
-        print(f"Warning: No user filter inserted into {file_path}")
-        return None
-
-    # Parse parameters
-    params = []
-    defaults = {}
-    if params_str.strip():
-        # Split by comma but handle nested parentheses
-        param_parts = re.findall(r'(\w+)(?:\s*:\s*\w+)?(?:\s*=\s*([^,]+))?(?:,|$)', params_str)
-        for param_name, default_value in param_parts:
-            params.append(param_name)
-            if default_value:
-                # Clean up default value
-                default_value = default_value.strip()
-                if default_value.startswith('"') and default_value.endswith('"'):
-                    defaults[param_name] = default_value[1:-1]
-                elif default_value == 'None':
-                    defaults[param_name] = None
-                elif default_value.isdigit():
-                    defaults[param_name] = int(default_value)
-                else:
-                    defaults[param_name] = default_value
-    # Extract detection info from metadata
-    detection_info = metadata.get('dscc', {}).get('detection', {})
-    
-    return {
-        "file_path": file_path,
-        "file_name": os.path.basename(file_path).replace('.py', ''),
-        "function_name": function_name,
-        "full_function": full_function,
-        "name": detection_info.get('name', function_name.replace('_', ' ').title()),
-        "description": detection_info.get('description', '').strip(),
-        "objective": detection_info.get('objective', '').strip(),
-        "false_positives": detection_info.get('false_positives', '').strip(),
-        "severity": detection_info.get('severity', '').strip(),
-        "fidelity": detection_info.get('fidelity', '').strip(),
-        "params": params,
-        "defaults": defaults,
-        "metadata": metadata
-    }
-
-def discover_detections(base_path: str = None) -> Dict[str, Dict]:
-    """Dynamically discover all detection files and parse their metadata.
-    Uses Databricks workspace SDK for compatibility with both classic compute and serverless.
-    """
-
-    detections = {}
-
-    # Get the detections directory path
-    if base_path is None:
-        detections_base = os.path.join(cwd, "base", "detections")
-    else:
-        detections_base = base_path
-
-    print(f"Looking for detection files in {detections_base}")
-
-    # Scan both event-based and behavioral subdirectories
-    detection_files = []
-    for subdir in ["event-based", "behavioral"]:
-        detections_dir = os.path.join(detections_base, subdir)
-
-        try:
-            detection_objects = list(w.workspace.list(detections_dir))
-            files = [
-                obj.path for obj in detection_objects
-                if obj.path and (obj.path.endswith(".py") or
-                               (obj.object_type and obj.object_type.name == "NOTEBOOK"))
-            ]
-            detection_files.extend(files)
-            print(f"  Found {len(files)} detection files in {subdir}/")
-        except Exception as e:
-            print(f"  Warning: Failed to scan {detections_dir}: {e}")
-
-    print(f"\nTotal detection files found: {len(detection_files)}")
-
-    for file_path in detection_files:
-        detection_info = parse_detection_file(file_path)
-        if detection_info:
-            detection_name = detection_info["file_name"]
-            detections[detection_name] = detection_info
-            print(f"  ✓ Loaded: {detection_name}")
-
-    print(f"\nSuccessfully loaded {len(detections)} detections")
-    return detections
-
-# COMMAND ----------
-
-# MAGIC %md
-# MAGIC ## Helper Functions
-
-# COMMAND ----------
-
-def format_time_range(days: int) -> Tuple[str, str]:
-    """Format time range for detection functions"""
-    latest = datetime.now()
-    earliest = latest - timedelta(days=days)
-    
-    return (
-        earliest.strftime("%Y-%m-%d %H:%M:%S"),
-        latest.strftime("%Y-%m-%d %H:%M:%S")
-    )
-
-def generate_detection_code(detection_name: str, config: Dict, user_email: str, earliest: str, latest: str) -> str:
-    """Generate PySpark code for a specific detection"""
-    
-    # Build the function call with parameters
-    params = []
-    for param in config.get("params", []):
-        if param == "earliest":
-            params.append(f'earliest="{earliest}"')
-        elif param == "latest":
-            params.append(f'latest="{latest}"')
-        elif param in config.get("defaults", {}):
-            default_value = config["defaults"][param]
-            if default_value is not None:
-                if isinstance(default_value, str):
-                    params.append(f'{param}="{default_value}"')
-                else:
-                    params.append(f'{param}={default_value}')
-    
-    function_call = f"{config['function_name']}({', '.join(params)})"
-    
-    safe_name = _sanitize_for_python_comment(config.get('name', detection_name))
-
-    # Generate the code
-    code = f"""# Run detection: {safe_name}
-
-{config['full_function']}
-
-try:
-    result_df = {function_call}
-
-    # Check if we have results
-    if result_df is not None and result_df.count() > 0:
-        print(f"✓ Found {{result_df.count()}} events")
-        display(result_df)
-        detection_triggered = True
-    else:
-        print(f"○ No events in the specified time range")
-        detection_triggered = False
-
-except Exception as e:
-    print(f"✗ Error running detection: {{e}}")
-    detection_triggered = False
-"""
-
-    return code
+# MAGIC %run ../../lib/notebook_generator_base
 
 # COMMAND ----------
 
@@ -290,29 +50,34 @@ except Exception as e:
 # COMMAND ----------
 
 def generate_user_notebook(user_email: str, time_range_days: int = 30, all_detections: dict = None) -> str:
-    """Generate a complete notebook for analyzing a specific user's behavior"""
-    
-    # Discover all detections
-    all_detections = all_detections or discover_detections()
-    
-    earliest, latest = format_time_range(time_range_days)
-    
+    """Generate a complete notebook for analyzing a specific user's behavior.
+
+    Uses shared functions from notebook_generator_base (loaded via %run):
+    - discover_detections(), format_time_range(), generate_detection_code()
+    - _sanitize_for_markdown(), _sanitize_for_python_comment()
+    """
+
+    # Discover all detections with user email filtering
+    all_detections = all_detections or discover_detections(user_email=user_email)
+
+    earliest, latest = format_time_range(days=time_range_days)
+
     # Sort detections alphabetically by name for consistent ordering
     sorted_detections = sorted(
         all_detections.items(),
         key=lambda x: x[1].get("name", x[0])
     )
-    
+
     # Define magic command prefix as a variable to avoid confusion
     magic = "# MAGIC"
     command = "# COMMAND ----------"
     notebook_content = f"""# Databricks notebook source
 {magic} %md
 {magic} # User Behavior Analysis Report
-{magic} 
-{magic} **User:** {user_email}  
-{magic} **Analysis Period:** {earliest} to {latest} ({time_range_days} days)  
-{magic} **Total Detections Included:** {len(all_detections)}  
+{magic}
+{magic} **User:** {user_email}
+{magic} **Analysis Period:** {earliest} to {latest} ({time_range_days} days)
+{magic} **Total Detections Included:** {len(all_detections)}
 {magic} **Generated:** {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
 {command}
@@ -350,7 +115,7 @@ print("=" * 60)
 {magic} %md
 {magic} ### IP Addresses
 {magic}
-{magic} The report below will show the IP Addresses that have been used by the time period. If there is a small number of IPs before any suspect period, followed by a new IP during a suspect period, it is prudent to review that IP address. 
+{magic} The report below will show the IP Addresses that have been used by the time period. If there is a small number of IPs before any suspect period, followed by a new IP during a suspect period, it is prudent to review that IP address.
 
 {command}
 
@@ -394,7 +159,7 @@ order by earliest desc
 
 {command}
 
-{magic} %md 
+{magic} %md
 {magic} ### API Actions
 
 {command}
@@ -416,7 +181,7 @@ order by earliest desc
 
 {command}
 
-{magic} %md 
+{magic} %md
 {magic} ### Billing Usage
 {magic}
 {magic} We suggest viewing a stacked area chart of SKU usage over time to identify any spikes.
@@ -439,7 +204,7 @@ group by all
 
 {magic} %md
 {magic} ## Detection Analysis
-{magic} 
+{magic}
 {magic} Analyzing user activity across {len(all_detections)} security detections.
 
 {command}
@@ -456,7 +221,7 @@ summary_stats = {{
 detection_triggered = False
 
 """
-    
+
     # Add all detections
     fields = [
         {"field": "description", "label": "Description"},
@@ -490,7 +255,7 @@ detection_triggered = False
 
 {command}
 
-{generate_detection_code(detection_name, config, user_email, earliest, latest)}
+{generate_detection_code(detection_name, config, earliest, latest)}
 
 # Update summary statistics if detection triggered
 if detection_triggered:
@@ -498,7 +263,7 @@ if detection_triggered:
     summary_stats["detections_triggered"].append("{display_name}")
 
 """
-    
+
     # Add summary section
     notebook_content += f"""
 {command}
@@ -533,7 +298,7 @@ else:
 {magic} ---
 {magic} *Report generated on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} using User Behavior Analysis Framework*
 """
-    
+
     return notebook_content
 
 # COMMAND ----------
@@ -543,15 +308,15 @@ else:
 
 # COMMAND ----------
 
-# Discover available detections
+# Discover available detections (with user email for filtering)
 print("Discovering available detections...")
-all_detections = discover_detections()
+all_detections = discover_detections(user_email=user_email)
 
 print(f"\nTotal detections available: {len(all_detections)}")
 
 # COMMAND ----------
 
-# # Generate the notebook content
+# Generate the notebook content
 notebook_content = generate_user_notebook(
     user_email=user_email,
     time_range_days=time_range_days,
@@ -560,7 +325,7 @@ notebook_content = generate_user_notebook(
 
 # Create output file name
 output_filename = f"user_analysis_{user_email.replace('@', '_at_').replace('.', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-output_path = os.path.join(cwd, "generated", output_filename)
+output_path = os.path.join(get_repo_root(), "generated", output_filename)
 
 # Save the notebook
 w.workspace.upload(output_path, io.BytesIO(notebook_content.encode('utf-8')), format=ImportFormat.SOURCE, language=Language.PYTHON)
