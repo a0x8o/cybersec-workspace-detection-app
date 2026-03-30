@@ -29,6 +29,40 @@ THREAT_MODEL_RISK_DESCRIPTIONS = {
 
 # COMMAND ----------
 
+# Threat model display metadata (titles and descriptions for generated notebooks)
+THREAT_MODEL_METADATA = {
+    "account_takeover": {
+        "title": "Account Takeover or Compromise",
+        "description": "Detects unauthorized account access and compromise attempts including credential theft, session hijacking, MFA bypass, and privilege escalation."
+    },
+    "data_exfiltration": {
+        "title": "Data Exfiltration",
+        "description": "Detects unauthorized data movement attempts using SQL queries, workspace downloads, explicit credentials, and high-volume data access patterns."
+    },
+    "insider_threat": {
+        "title": "Insider Threat",
+        "description": "Detects malicious or negligent insider activities including data exfiltration, administrative abuse, configuration tampering, audit evasion, and destructive actions."
+    },
+    "supply_chain": {
+        "title": "Supply Chain Attacks",
+        "description": "Detects indicators of supply chain compromise including credential scanning, secret enumeration, and malicious code injection attempts."
+    },
+    "databricks_compromise": {
+        "title": "Potential Compromise of Databricks",
+        "description": "Monitors for indicators of Databricks platform compromise including employee access, account-level changes, and security configuration tampering."
+    },
+    "ransomware": {
+        "title": "Ransomware Attacks",
+        "description": "Detects indicators of ransomware activity including configuration tampering, destructive actions, account/group deletion, and audit evasion."
+    },
+    "resource_abuse": {
+        "title": "Resource Abuse",
+        "description": "Detects indicators of resource abuse including unusual compute usage, suspicious account/token creation, and crypto mining patterns."
+    }
+}
+
+# COMMAND ----------
+
 # Mappings from threat models to detection file paths (relative to base/detections/)
 # Detection paths use the format "event-based/filename" or "behavioral/filename" (without .py extension)
 THREAT_MODEL_MAPPINGS = {

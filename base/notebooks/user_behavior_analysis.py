@@ -23,6 +23,13 @@ time_range_days = int(dbutils.widgets.get("time_range_days"))
 if not user_email:
     raise ValueError("Please provide a user email address")
 
+# Validate email format to prevent injection in generated notebook code
+import re as _re
+if not _re.match(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$', user_email):
+    raise ValueError(f"Invalid email format: {user_email!r}")
+if time_range_days < 1 or time_range_days > 365:
+    raise ValueError(f"time_range_days must be between 1 and 365, got: {time_range_days}")
+
 print(f"Generating user behavior analysis notebook for: {user_email}")
 print(f"Time range: {time_range_days} days")
 print()
@@ -97,12 +104,13 @@ def parse_detection_file(file_path: str) -> Dict[str, Any]:
         print(f"Warning: No full function found in {file_path}")
         return None
     full_function = full_function_match.group(1)
+    # Use variable reference (USER_EMAIL) instead of interpolating raw email to prevent injection
     user_replaced = False
     if 'spark.table("system.access.audit")' in full_function:
-        full_function = full_function.replace('spark.table("system.access.audit")', 'spark.table("system.access.audit").filter(col("user_identity.email") == "{}")'.format(user_email))
+        full_function = full_function.replace('spark.table("system.access.audit")', 'spark.table("system.access.audit").filter(col("user_identity.email") == lit(USER_EMAIL))')
         user_replaced = True
     if 'spark.table("system.query.history")' in full_function:
-        full_function = full_function.replace('spark.table("system.query.history")', 'spark.table("system.query.history").filter(col("executed_as") == "{}")'.format(user_email))
+        full_function = full_function.replace('spark.table("system.query.history")', 'spark.table("system.query.history").filter(col("executed_as") == lit(USER_EMAIL))')
         user_replaced = True
     if not user_replaced:
         print(f"Warning: No user filter inserted into {file_path}")
@@ -161,9 +169,9 @@ def discover_detections(base_path: str = None) -> Dict[str, Dict]:
 
     print(f"Looking for detection files in {detections_base}")
 
-    # Scan both binary and behavioral subdirectories
+    # Scan both event-based and behavioral subdirectories
     detection_files = []
-    for subdir in ["binary", "behavioral"]:
+    for subdir in ["event-based", "behavioral"]:
         detections_dir = os.path.join(detections_base, subdir)
 
         try:
@@ -295,12 +303,12 @@ def generate_user_notebook(user_email: str, time_range_days: int = 30, all_detec
 
 {command}
 
-from pyspark.sql.functions import col, count, when, max as spark_max, min as spark_min
+from pyspark.sql.functions import col, lit, count, when, max as spark_max, min as spark_min
 from datetime import datetime, timedelta
 import pandas as pd
 
 # Analysis parameters
-USER_EMAIL = "{user_email}"
+USER_EMAIL = {repr(user_email)}
 EARLIEST = "{earliest}"
 LATEST = "{latest}"
 TIME_RANGE_DAYS = {time_range_days}

@@ -119,18 +119,19 @@ def parse_detection_file(file_path: str, user_email: Optional[str] = None) -> Di
     full_function = full_function_match.group(1)
 
     # Apply user filter if specified (for user behavior analysis)
+    # Uses variable reference (USER_EMAIL) instead of interpolating raw email to prevent injection
     user_replaced = False
     if user_email:
         if 'spark.table("system.access.audit")' in full_function:
             full_function = full_function.replace(
                 'spark.table("system.access.audit")',
-                f'spark.table("system.access.audit").filter(col("user_identity.email") == "{user_email}")'
+                'spark.table("system.access.audit").filter(col("user_identity.email") == lit(USER_EMAIL))'
             )
             user_replaced = True
         if 'spark.table("system.query.history")' in full_function:
             full_function = full_function.replace(
                 'spark.table("system.query.history")',
-                f'spark.table("system.query.history").filter(col("executed_as") == "{user_email}")'
+                'spark.table("system.query.history").filter(col("executed_as") == lit(USER_EMAIL))'
             )
             user_replaced = True
         if not user_replaced:
@@ -194,6 +195,7 @@ def discover_detections(base_path: str = None, detection_list: List[str] = None,
     """
     detections = {}
     repo_root = get_repo_root()
+    detections_base = os.path.join(repo_root, "base", "detections")
 
     if detection_list:
         # Load specific detections from the list
@@ -203,6 +205,12 @@ def discover_detections(base_path: str = None, detection_list: List[str] = None,
             # detection_path is like "event-based/sso_config_changed" or "behavioral/access_token_created"
             # Build path: repo_root + /base/detections/ + detection_path + .py
             full_path = os.path.join(repo_root, "base", "detections", detection_path)
+
+            # Path traversal validation: ensure resolved path stays within detections directory
+            normalized = os.path.normpath(full_path)
+            if not normalized.startswith(os.path.normpath(detections_base)):
+                print(f"  ✗ Skipping invalid path (outside detections directory): {detection_path}")
+                continue
             if not full_path.endswith('.py'):
                 full_path += '.py'
 
@@ -225,8 +233,8 @@ def discover_detections(base_path: str = None, detection_list: List[str] = None,
         print(f"Repo root: {repo_root}")
         print(f"Scanning for detections in {detections_base}...")
 
-        # Scan both binary and behavioral subdirectories
-        for subdir in ["binary", "behavioral"]:
+        # Scan both event-based and behavioral subdirectories
+        for subdir in ["event-based", "behavioral"]:
             detections_dir = os.path.join(detections_base, subdir)
 
             try:
@@ -610,5 +618,81 @@ else:
 """
 
     return notebook_content
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Threat Model Runner
+
+# COMMAND ----------
+
+def validate_widget_int(name: str, value_str: str, min_val: int = 1, max_val: int = 365) -> int:
+    """Validate and parse an integer widget value.
+
+    Args:
+        name: Widget name for error messages
+        value_str: Raw string value from widget
+        min_val: Minimum allowed value
+        max_val: Maximum allowed value
+
+    Returns:
+        Validated integer value
+
+    Raises:
+        ValueError: If value is not a valid integer or out of range
+    """
+    try:
+        value = int(value_str)
+    except (ValueError, TypeError):
+        raise ValueError(f"Widget '{name}' must be a valid integer, got: {value_str!r}")
+    if value < min_val or value > max_val:
+        raise ValueError(f"Widget '{name}' must be between {min_val} and {max_val}, got: {value}")
+    return value
+
+def run_threat_model_investigation(threat_model: str):
+    """Run a complete threat model investigation: discover detections, generate notebook, upload.
+
+    Reads widget values for time_range_days and binary_time_range_hours.
+    Uses THREAT_MODEL_MAPPINGS, THREAT_MODEL_METADATA, and THREAT_MODEL_RISK_DESCRIPTIONS
+    (loaded via %run ../../../lib/threat_model_mappings).
+
+    Args:
+        threat_model: Key into THREAT_MODEL_MAPPINGS (e.g., "account_takeover")
+
+    Raises:
+        ValueError: If threat_model key not found in mappings
+    """
+    if threat_model not in THREAT_MODEL_MAPPINGS:
+        raise ValueError(f"Unknown threat model: {threat_model!r}. Valid keys: {list(THREAT_MODEL_MAPPINGS.keys())}")
+
+    metadata = THREAT_MODEL_METADATA.get(threat_model, {})
+    title = metadata.get("title", threat_model.replace("_", " ").title())
+    description = metadata.get("description", f"Investigation for {title}")
+
+    # Discover detections for this threat model
+    detection_list = THREAT_MODEL_MAPPINGS[threat_model]
+    all_detections = discover_detections(detection_list=detection_list)
+    print(f"Found {len(all_detections)} detections for: {threat_model}")
+
+    # Validate and parse widget values
+    time_range_days = validate_widget_int("time_range_days", dbutils.widgets.get("time_range_days"), min_val=1, max_val=365)
+    binary_hours = validate_widget_int("binary_time_range_hours", dbutils.widgets.get("binary_time_range_hours"), min_val=1, max_val=720)
+
+    # Generate notebook
+    notebook_content = generate_threat_model_notebook(
+        threat_model=threat_model,
+        threat_model_title=title,
+        threat_model_description=description,
+        all_detections=all_detections,
+        time_range_days=time_range_days,
+        binary_time_range_hours=binary_hours
+    )
+
+    # Save to generated folder
+    output_path = f"{get_repo_root()}/generated/threat_model_{threat_model}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    w.workspace.upload(output_path, io.BytesIO(notebook_content.encode('utf-8')),
+                       format=ImportFormat.SOURCE, language=Language.PYTHON)
+
+    print(f"✅ Generated: {output_path}")
 
 # COMMAND ----------

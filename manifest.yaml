@@ -22,11 +22,11 @@ configuration: Detection searches rely on access to the audit table, and executi
   trigger schedule matches the lookback period to ensure full coverage, and avoid
   duplicate events on subsequent runs.
 logo: metadata/logo.png
-release_date: <release_date>
-submitted_at: <submitted_at>
+release_date: '2025-05-09'
+submitted_at: '2025-05-09T12:56:50'
 user_email: derek.king@databricks.com
 notebooks:
-- path: base/detections/binary/user_account_deleted.py
+- path: base/detections/event-based/user_account_deleted.py
   dscc:
     author: Derek King - Databricks
     created: '2025-05-09T12:56:50'
@@ -41,7 +41,7 @@ notebooks:
         administrative actions # MAGIC that could be used to erase accounts and disrupt
         auditing or accountability. # MAGIC '
     version: 1.0.0
-- path: base/detections/binary/sso_config_changed.py
+- path: base/detections/event-based/sso_config_changed.py
   dscc:
     author: Derek King - Databricks
     created: '2025-05-09T12:56:50'
@@ -56,7 +56,7 @@ notebooks:
         identity provider tampering, # MAGIC which could allow attackers to redirect
         authentication flows or weaken enterprise access controls. # MAGIC '
     version: 1.0.0
-- path: base/detections/binary/attempted_logon_from_denied_ip.py
+- path: base/detections/event-based/attempted_logon_from_denied_ip.py
   dscc:
     author: Derek King - Databricks
     created: '2025-05-09T12:56:50'
@@ -150,7 +150,7 @@ notebooks:
         between IPs or devices within a short timeframe, # MAGIC which may indicate
         credential theft, account compromise, or abuse of persistent sessions. # MAGIC '
     version: 1.0.0
-- path: base/detections/binary/user_role_modified.py
+- path: base/detections/event-based/user_role_modified.py
   dscc:
     author: Derek King - Databricks
     created: '2025-05-09T12:56:50'
@@ -195,7 +195,7 @@ notebooks:
         escalation or role provisioning, # MAGIC which may signal insider misuse or
         preparatory steps in a broader attack. # MAGIC '
     version: 1.0.0
-- path: base/detections/binary/group_deleted.py
+- path: base/detections/event-based/group_deleted.py
   dscc:
     author: Derek King - Databricks
     created: '2025-05-09T12:56:50'
@@ -226,7 +226,7 @@ notebooks:
         logging in from multiple IPs with unusual frequency over a short duration.
         # MAGIC '
     version: 1.0.0
-- path: base/detections/binary/principal_removed_from_group.py
+- path: base/detections/event-based/principal_removed_from_group.py
   dscc:
     author: Derek King - Databricks
     created: '2025-05-09T12:56:50'
@@ -258,7 +258,7 @@ notebooks:
         or user agents within a 24-hour period, indicating potential session hijacking
         or credential sharing. # MAGIC '
     version: 1.0.0
-- path: base/detections/binary/databricks_employee_logon.py
+- path: base/detections/event-based/databricks_employee_logon.py
   dscc:
     author: Derek King - Databricks
     created: '2025-05-09T12:56:50'
@@ -330,7 +330,7 @@ notebooks:
         to detect unauthorized provisioning activity, # MAGIC potential insider threats,
         or abuse of administrative privileges. # MAGIC '
     version: 1.0.0
-- path: base/detections/binary/verbose_audit_logging_disabled.py
+- path: base/detections/event-based/verbose_audit_logging_disabled.py
   dscc:
     author: Derek King - Databricks
     created: '2025-05-09T12:56:50'
@@ -375,6 +375,200 @@ notebooks:
       objective: 'Track password changes across user accounts to identify potentially
         unauthorized credential resets, # MAGIC which could indicate account takeover
         attempts, insider misuse, or lateral movement within the environment. # MAGIC '
+    version: 1.0.0
+- path: base/detections/event-based/account_admin_privileged_role_assignment.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000001
+    content_type: detection
+    detection:
+      name: Account Admin Privileged Role Assignment
+      description: Detects when account admin privileges are assigned to specific users
+        or service principals through direct privilege grants, or when users/SPNs are
+        added to designated account admin groups.
+      objective: Identify targeted and granular account admin privilege grants through
+        direct assignment to individual principals (setAccountAdmin, setAdmin), account
+        ownership changes (changeAccountOwner), or by adding specific users/SPNs to
+        monitored account admin groups.
+    version: 1.0.0
+- path: base/detections/event-based/configuration_changes_account_level.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000002
+    content_type: detection
+    detection:
+      name: Account Level Configuration Changes
+      description: Detects when users modify account-level settings, which could indicate
+        privilege escalation attempts or unauthorized administrative changes to tenant-wide
+        configurations.
+      objective: Identify potentially suspicious account-level configuration changes
+        that could affect the entire Databricks tenant. Maps to MITRE ATT&CK TA0004
+        - Privilege Escalation - T1484 - Domain or Tenant Policy Modification.
+    version: 1.0.0
+- path: base/detections/event-based/configuration_changes_high_priority.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000003
+    content_type: detection
+    detection:
+      name: High Priority Configuration Changes
+      description: Detects high-priority configuration changes including verbose audit
+        logging modifications, IP access list changes, and customer-approved workspace
+        login configuration updates that could impact security posture.
+      objective: Monitor critical configuration changes that could weaken security controls,
+        modify access policies, or reduce system visibility.
+    version: 1.0.0
+- path: base/detections/event-based/configuration_changes_workspace_level.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000004
+    content_type: detection
+    detection:
+      name: Workspace Configuration Changes
+      description: Detects when users modify workspace-level configurations, including
+        security-relevant settings such as export restrictions and other workspace policies
+        that could affect security posture.
+      objective: Identify potentially suspicious workspace-level configuration changes
+        that could weaken security controls or modify data export policies. Maps to
+        MITRE ATT&CK TA0004 - Privilege Escalation - T1484 - Domain or Tenant Policy
+        Modification.
+    version: 1.0.0
+- path: base/detections/event-based/metastore_admin_privilege_granted.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000005
+    content_type: detection
+    detection:
+      name: Metastore Admin Privilege Granted
+      description: Detects when metastore ownership is changed or when users/SPNs are
+        added to designated metastore admin groups.
+      objective: Identify metastore admin privilege grants through metastore ownership
+        changes or by adding specific users/SPNs/nested groups to monitored metastore
+        admin groups. Metastore admin grants complete control over Unity Catalog data
+        access permissions.
+    version: 1.0.0
+- path: base/detections/event-based/trufflehog_scan_detected.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000006
+    content_type: detection
+    detection:
+      name: TruffleHog Scan Detected
+      description: Detects when TruffleHog scanning tool is used, indicating potential
+        credential scanning activity and likely credential leakage.
+      objective: Identify when TruffleHog scanning tool is used in the environment,
+        which typically indicates an attacker is scanning for hardcoded credentials,
+        API keys, or other secrets.
+    version: 1.0.0
+- path: base/detections/event-based/user_admin_account_change.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000007
+    content_type: detection
+    detection:
+      name: Admin User Account Changes
+      description: Detects when users modify admin-level privileges or admin group memberships,
+        which could indicate privilege escalation attempts or unauthorized administrative
+        access modifications.
+      objective: Identify potentially suspicious changes to administrative privileges
+        including direct admin role assignments, account ownership changes, and modifications
+        to admin group memberships. Maps to MITRE ATT&CK TA0003 - Persistence - T1098
+        - Account Manipulation.
+    version: 1.0.0
+- path: base/detections/event-based/workspace_admin_privileged_role_assignment.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000008
+    content_type: detection
+    detection:
+      name: Workspace Admin Privileged Role Assignment
+      description: Detects when workspace admin privileges are assigned to users/SPNs
+        through direct admin entitlement grants or additions to the workspace admins
+        group.
+      objective: Identify workspace admin privilege grants through direct admin entitlement
+        assignment or direct addition to the system reserved admins group. Unauthorized
+        grants could indicate privilege escalation attempts or compromised accounts.
+    version: 1.0.0
+- path: base/detections/behavioral/potential_data_movement_explicit_creds.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000009
+    content_type: detection
+    detection:
+      name: Potential Data Movement Commands with Explicit Credentials
+      description: Detects events where users execute commands that could involve explicit
+        credentials for data movement operations, such as DBFS mounts, storage credential
+        operations, or connection management.
+      objective: Identify potentially suspicious data movement activities where explicit
+        credentials might be provided instead of using existing secure configurations.
+        Maps to MITRE ATT&CK TA0010 - Exfiltration - T1537 - Transfer Data to Cloud
+        Account.
+    version: 1.0.0
+- path: base/detections/behavioral/potential_data_movement_sql_queries.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000010
+    content_type: detection
+    detection:
+      name: Potential Data Movement Commands with SQL Queries
+      description: Detects SQL queries that contain COPY INTO statements with explicit
+        credentials, which could indicate data exfiltration attempts using SQL commands
+        with embedded credentials.
+      objective: Identify potentially suspicious SQL queries that use COPY INTO commands
+        with explicit credentials instead of using secure, pre-configured storage credentials.
+        Maps to MITRE ATT&CK TA0010 - Exfiltration - T1537 - Transfer Data to Cloud
+        Account.
+    version: 1.0.0
+- path: base/detections/behavioral/potential_data_movement_workspace_downloads.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000011
+    content_type: detection
+    detection:
+      name: Potential Data Movement via Workspace Downloads
+      description: Detects downloads from the workspace including exports, large query
+        results, file downloads, and model artifacts that could indicate data exfiltration
+        attempts.
+      objective: Identify potentially suspicious download activities that could indicate
+        data exfiltration attempts. Maps to MITRE ATT&CK TA0010 - Exfiltration - T1567
+        - Exfiltration Over Web Service.
+    version: 1.0.0
+- path: base/detections/behavioral/secret_scanning_activity.py
+  dscc:
+    author: Derek King - Databricks
+    created: '2025-05-09T12:56:50'
+    modified: '2025-05-09T12:56:50'
+    uuid: a1b2c3d4-1001-4a01-b001-000000000012
+    content_type: detection
+    detection:
+      name: Secrets Discovery
+      description: Detects when someone enumerates what secrets exist in the environment
+        by looking for users who list secret scopes and access multiple secrets.
+      objective: Identify potential reconnaissance activities where an attacker or malicious
+        insider enumerates available secrets. Maps to MITRE ATT&CK TA0007 - Discovery
+        - T1526 - Cloud Service Discovery.
     version: 1.0.0
 - path: base/notebooks/threat_models/threat_model_account_takeover.py
   dscc:

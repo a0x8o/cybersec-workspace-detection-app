@@ -23,7 +23,7 @@ configuration: Detection searches rely on access to the audit table, and executi
   duplicate events on subsequent runs.
 logo: metadata/logo.png
 screenshots: []
-release_date: <release_date>
-submitted_at: <submitted_at>
+release_date: '2025-05-09'
+submitted_at: '2025-05-09T12:56:50'
 tags: []
 user_email: derek.king@databricks.com

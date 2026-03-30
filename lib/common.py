@@ -164,38 +164,82 @@ class MaxMindEnrichmentBase(PandasFunctionEnrichmentBase):
 
     def _get_database(self):
         """
-        Returns a file name to read database from.
-        :return: database file name
+        Returns a Reader for the MaxMind database, using a local cached copy when possible.
+        :return: database Reader
         """
         db_name = self._dbfs_file_name
         try:
             local_path = os.path.join(self.__local_tmp_directory__, self._file_name)
             if not os.path.exists(local_path):
-                # print("No local copy found, copying")
                 os.makedirs(self.__local_tmp_directory__, exist_ok=True)
                 self._copy_db_file(local_path)
             else:
-                # print("Local copy is older than remote copy, copying new version")
                 lstat = os.stat(local_path)
                 rstat = os.stat(self._dbfs_file_name)
                 if rstat.st_mtime > lstat.st_mtime:
                     self._copy_db_file(local_path)
-                db_name = local_path
+            db_name = local_path
         except OSError as e:
             print(f"OS error occurred, using remote file directly: {e}")
 
         return database.Reader(db_name)
 
     @abstractmethod
-    def create_pandas_udf_function(self):
-        """Implementations need to override this function with a function that will return
-         UDF/Pandas UDF that will perform actual enrichment
+    def _empty_record(self) -> Dict[str, Any]:
+        """Return the empty/default record for this enrichment type."""
+        pass
+
+    @abstractmethod
+    def _extract_record(self, db_reader, ip: str) -> Dict[str, Any]:
+        """Extract enrichment data from the MaxMind database for a single IP.
+
+        Args:
+            db_reader: MaxMind database reader
+            ip: IP address string
+
+        Returns:
+            Dictionary of enrichment fields, or the empty record on failure
         """
         pass
 
     @abstractmethod
     def __type__for_null__(self) -> str:
         pass
+
+    @abstractmethod
+    def _udf_return_schema(self) -> str:
+        """Return the PySpark schema string for the pandas UDF."""
+        pass
+
+    def create_pandas_udf_function(self):
+        """Create a pandas UDF that applies MaxMind enrichment with caching."""
+        empty_record = self._empty_record()
+
+        def extract_data(ip: str, db_reader, cache: Dict[str, Union[str, Dict[str, Any]]]):
+            cv = cache.get(ip)
+            if cv is not None:
+                if isinstance(cv, str):
+                    return None
+                return cv
+            rc: Union[str, Dict[str, Any]] = empty_record
+            if ip and is_public_ip(ip):
+                try:
+                    rc = self._extract_record(db_reader, ip)
+                except (geoip2.errors.AddressNotFoundError, ValueError):
+                    pass
+            cache[ip] = rc
+            return rc
+
+        schema = self._udf_return_schema()
+
+        @F.pandas_udf(schema)
+        def enrichment_udf(ips: pd.Series) -> pd.DataFrame:
+            db_reader = self._get_database()
+            cache: Dict[str, Union[str, Dict[str, Any]]] = {}
+            extracted = ips.apply(lambda ip: extract_data(ip, db_reader, cache))
+            return pd.DataFrame(extracted.values.tolist())
+
+        return enrichment_udf
 
     def get_column(self, src: Optional[str] = None, alias: Optional[str] = None) -> Column:
         if not src:
@@ -218,106 +262,63 @@ class MaxMindEnrichmentBase(PandasFunctionEnrichmentBase):
 class GeoIPEnrichment(MaxMindEnrichmentBase):
     """Class that enriches DataFrame with GeoIP data
     """
-    EMPTY_RECORD = {'city': None, 'country': None, 'country_code': None,
-                    'latitude': None, 'longitude': None, 'accuracy_radius': None}
 
     def __init__(self, db_file: str, ip_column_name_or_expr: str, dest_column_name: str = "geo"):
-        super().__init__("GeoIP", db_file, ip_column_name_or_expr, dest_column_name)
         """
-
         :param db_file: path to file with MaxMind database
         :param ip_column_name_or_expr: name of the column with IP information or SQL expression
         :param dest_column_name: name of the column in which data will be stored
         """
+        super().__init__("GeoIP", db_file, ip_column_name_or_expr, dest_column_name)
+
+    def _empty_record(self):
+        return {'city': None, 'country': None, 'country_code': None,
+                'latitude': None, 'longitude': None, 'accuracy_radius': None}
+
+    def _extract_record(self, db_reader, ip: str) -> Dict[str, Any]:
+        record = db_reader.city(ip)
+        return {
+            'city': record.city.name,
+            'country': record.country.name,
+            'country_code': record.country.iso_code,
+            'latitude': record.location.latitude,
+            'longitude': record.location.longitude,
+            'accuracy_radius': record.location.accuracy_radius
+        }
 
     def __type__for_null__(self):
         return ("struct<city:string, country:string, country_code:string, latitude:double, "
                 "longitude:double, accuracy_radius:int>")
 
-    def create_pandas_udf_function(self):
-        def extract_geoip_data(ip: str, geocity, cache: Dict[str, Union[str, Dict[str, Any]]]):
-            cv = cache.get(ip)
-            if cv is not None:
-                if isinstance(cv, str):
-                    return None
-                return cv
-            rc: Union[str, Dict[str, Any]] = GeoIPEnrichment.EMPTY_RECORD
-            if ip and is_public_ip(ip):
-                try:
-                    record = geocity.city(ip)
-                    rc = {
-                        'city': record.city.name,
-                        'country': record.country.name,
-                        'country_code': record.country.iso_code,
-                        'latitude': record.location.latitude,
-                        'longitude': record.location.longitude,
-                        'accuracy_radius': record.location.accuracy_radius
-                    }
-                except (geoip2.errors.AddressNotFoundError, ValueError):
-                    pass
+    def _udf_return_schema(self):
+        return "city string, country string, country_code string, latitude double, longitude double, accuracy_radius int"
 
-            cache[ip] = rc
-
-            return rc
-
-        @F.pandas_udf(
-            "city string, country string, country_code string, latitude double, longitude double, accuracy_radius int")
-        def get_geoip_data(ips: pd.Series) -> pd.DataFrame:
-            geocity = self._get_database()
-            cache: Dict[str, Union[str, Dict[str, Any]]] = {}
-            extracted = ips.apply(lambda ip: extract_geoip_data(ip, geocity, cache))
-
-            return pd.DataFrame(extracted.values.tolist())
-
-        return get_geoip_data
-    
 class ASNEnrichment(MaxMindEnrichmentBase):
     """Class that enriches DataFrame with data about Autonomous System (AS)
     """
-    EMPTY_RECORD = {'as_number': None, 'as_org': None, 'as_network': None}
 
     def __init__(self, db_file: str, ip_column_name_or_expr: str, dest_column_name: str = "as_data"):
-        super().__init__("ASN", db_file, ip_column_name_or_expr, dest_column_name)
         """
-
         :param db_file: path to file with MaxMind database
         :param ip_column_name_or_expr: name of the column with IP information or SQL expression
         :param dest_column_name: name of the column in which data will be stored
         """
+        super().__init__("ASN", db_file, ip_column_name_or_expr, dest_column_name)
+
+    def _empty_record(self):
+        return {'as_number': None, 'as_org': None, 'as_network': None}
+
+    def _extract_record(self, db_reader, ip: str) -> Dict[str, Any]:
+        record = db_reader.asn(ip)
+        return {'as_number': record.autonomous_system_number,
+                'as_org': record.autonomous_system_organization,
+                'as_network': str(record.network)}
 
     def __type__for_null__(self):
         return "struct<as_number:int, as_org:string, as_network:string>"
 
-    def create_pandas_udf_function(self):
-        def extract_asn_data(ip: str, asn, cache: Dict[str, Union[str, Dict[str, Any]]]):
-            cv = cache.get(ip)
-            if cv is not None:
-                if isinstance(cv, str):
-                    return None
-                return cv
-            rc: Union[str, Dict[str, Any]] = ASNEnrichment.EMPTY_RECORD
-            if ip and is_public_ip(ip):
-                try:
-                    record = asn.asn(ip)
-                    rc = {'as_number': record.autonomous_system_number,
-                          'as_org': record.autonomous_system_organization,
-                          'as_network': str(record.network)}
-                except (geoip2.errors.AddressNotFoundError, ValueError):
-                    pass
-
-            cache[ip] = rc
-
-            return rc
-
-        @F.pandas_udf("as_number int, as_org string, as_network string")
-        def get_asn_data(ips: pd.Series) -> pd.DataFrame:
-            asn = self._get_database()
-            cache: Dict[str, Union[str, Dict[str, Any]]] = {}
-            extracted = ips.apply(lambda ip: extract_asn_data(ip, asn, cache))
-
-            return pd.DataFrame(extracted.values.tolist())
-
-        return get_asn_data
+    def _udf_return_schema(self):
+        return "as_number int, as_org string, as_network string"
 
 # COMMAND ----------
 
@@ -546,9 +547,9 @@ def run_all_detections(
     try:
         w = WorkspaceClient()
 
-        # Scan both binary and behavioral subdirectories
+        # Scan both event-based and behavioral subdirectories
         notebook_paths = []
-        for subdir in ["binary", "behavioral"]:
+        for subdir in ["event-based", "behavioral"]:
             subdir_path = f"{workspace_dir}/{subdir}"
             try:
                 notebooks = list(w.workspace.list(subdir_path))

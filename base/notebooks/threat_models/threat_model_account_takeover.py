@@ -40,33 +40,6 @@ dbutils.widgets.text("binary_time_range_hours", "24", "Binary Window (hours)")
 
 # COMMAND ----------
 
-# Discover detections for this threat model
-threat_model = "account_takeover"
-detection_list = THREAT_MODEL_MAPPINGS[threat_model]
-all_detections = discover_detections(detection_list=detection_list)
-
-print(f"Found {len(all_detections)} detections for: {threat_model}")
-
-# COMMAND ----------
-
-# Generate the notebook
-time_range_days = int(dbutils.widgets.get("time_range_days"))
-binary_hours = int(dbutils.widgets.get("binary_time_range_hours"))
-
-notebook_content = generate_threat_model_notebook(
-    threat_model=threat_model,
-    threat_model_title="Account Takeover or Compromise",
-    threat_model_description="Detects unauthorized account access and compromise attempts including credential theft, session hijacking, MFA bypass, and privilege escalation.",
-    all_detections=all_detections,
-    time_range_days=time_range_days,
-    binary_time_range_hours=binary_hours
-)
-
-# Save to generated folder
-output_path = f"{get_repo_root()}/generated/threat_model_account_takeover_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-w.workspace.upload(output_path, io.BytesIO(notebook_content.encode('utf-8')),
-                   format=ImportFormat.SOURCE, language=Language.PYTHON)
-
-print(f"✅ Generated: {output_path}")
+run_threat_model_investigation("account_takeover")
 
 # COMMAND ----------
