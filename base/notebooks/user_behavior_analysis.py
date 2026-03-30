@@ -44,6 +44,10 @@ print()
 
 # COMMAND ----------
 
+from pyspark.sql.functions import col
+
+# COMMAND ----------
+
 # MAGIC %md
 # MAGIC ## Generate User-Specific Analysis Notebook
 
