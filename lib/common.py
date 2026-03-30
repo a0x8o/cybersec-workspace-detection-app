@@ -528,6 +528,10 @@ def run_all_detections(
     import re
     from databricks.sdk import WorkspaceClient
 
+    if not earliest or not latest:
+        raise ValueError("earliest and latest timestamps are required. "
+                         "Example: run_all_detections(earliest='2025-06-15 12:00:00', latest='2025-06-16 12:00:00')")
+
     # If workspace_dir not provided, derive it from the current notebook path
     if workspace_dir is None:
         workspace_dir = get_detections_dir()

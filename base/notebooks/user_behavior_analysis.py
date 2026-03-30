@@ -51,6 +51,23 @@ from databricks.sdk.service.workspace import ImportFormat, Language
 import io
 w = WorkspaceClient()
 
+
+def _sanitize_for_markdown(text: str) -> str:
+    """Sanitize text for safe embedding in generated notebook markdown cells."""
+    if not text:
+        return ""
+    text = text.replace("# MAGIC ", "").replace("#MAGIC ", "")
+    text = text.replace('"""', '').replace("'''", "")
+    text = re.sub(r'```\w*\n.*?```', '[code block removed]', text, flags=re.DOTALL)
+    return text.strip()
+
+
+def _sanitize_for_python_comment(text: str) -> str:
+    """Sanitize text for safe embedding in generated Python code comments."""
+    if not text:
+        return ""
+    return text.replace('\n', ' ').replace('\r', '').strip()[:200]
+
 # Get current notebook path (works on both classic compute and serverless)
 def get_notebook_path():
     return dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
@@ -76,8 +93,12 @@ def parse_detection_file(file_path: str) -> Dict[str, Any]:
     """Parse a detection file to extract metadata and function information"""
     file_path = re.sub(r'\.py$', '', file_path)
     print(f"Parsing detection file: {file_path}")
-    with w.workspace.download(file_path) as f:
-        content = f.read().decode()
+    try:
+        with w.workspace.download(file_path) as f:
+            content = f.read().decode()
+    except Exception as e:
+        print(f"Warning: Failed to download {file_path}: {e}")
+        return None
     # Extract the YAML metadata from the markdown cell
     yaml_match = re.search(r'```yaml\s*(.*?)```', content, re.DOTALL)
     if not yaml_match:
@@ -235,14 +256,16 @@ def generate_detection_code(detection_name: str, config: Dict, user_email: str, 
     
     function_call = f"{config['function_name']}({', '.join(params)})"
     
+    safe_name = _sanitize_for_python_comment(config.get('name', detection_name))
+
     # Generate the code
-    code = f"""# Run detection: {config.get('name', detection_name)}
+    code = f"""# Run detection: {safe_name}
 
 {config['full_function']}
 
 try:
     result_df = {function_call}
-    
+
     # Check if we have results
     if result_df is not None and result_df.count() > 0:
         print(f"✓ Found {{result_df.count()}} events")
@@ -251,12 +274,12 @@ try:
     else:
         print(f"○ No events in the specified time range")
         detection_triggered = False
-        
+
 except Exception as e:
     print(f"✗ Error running detection: {{e}}")
     detection_triggered = False
 """
-    
+
     return code
 
 # COMMAND ----------
@@ -331,18 +354,18 @@ print("=" * 60)
 
 {command}
 
-display(spark.sql(f'''
-select 
-    min(event_time) as earliest, 
-    max(event_time) as latest, 
-    count(*) as total_events, 
-    count(distinct service_name || action_name) as num_unique_actions, 
-    source_ip_address 
-from system.access.audit 
-where user_identity.email = '{{USER_EMAIL}}' and event_time between '{{EARLIEST}}' and '{{LATEST}}' 
-group by all 
+display(spark.sql('''
+select
+    min(event_time) as earliest,
+    max(event_time) as latest,
+    count(*) as total_events,
+    count(distinct service_name || action_name) as num_unique_actions,
+    source_ip_address
+from system.access.audit
+where user_identity.email = :user_email and event_time between :earliest and :latest
+group by all
 order by earliest desc
-'''))
+''', args={{"user_email": USER_EMAIL, "earliest": EARLIEST, "latest": LATEST}}))
 
 {command}
 
@@ -353,21 +376,21 @@ order by earliest desc
 
 {command}
 
-display(spark.sql(f'''
-select 
-  min(event_time) as earliest, 
-  max(event_time) as latest, 
-  count(*) as total_events, 
-  count(distinct source_ip_address) as num_source_ips, 
-  count(distinct user_agent) as num_useragents, 
-  request_params.tokenId 
-from system.access.audit where 
-  action_name == "tokenLogin" and 
+display(spark.sql('''
+select
+  min(event_time) as earliest,
+  max(event_time) as latest,
+  count(*) as total_events,
+  count(distinct source_ip_address) as num_source_ips,
+  count(distinct user_agent) as num_useragents,
+  request_params.tokenId
+from system.access.audit where
+  action_name == "tokenLogin" and
   request_params.authenticationMethod!='API_INT_PAT_TOKEN' and  -- filters out internal actions from a notebook / job
-  user_identity.email = '{{USER_EMAIL}}' and event_time between '{{EARLIEST}}' and '{{LATEST}}' 
-group by all 
+  user_identity.email = :user_email and event_time between :earliest and :latest
+group by all
 order by earliest desc
-'''))
+''', args={{"user_email": USER_EMAIL, "earliest": EARLIEST, "latest": LATEST}}))
 
 {command}
 
@@ -376,20 +399,20 @@ order by earliest desc
 
 {command}
 
-display(spark.sql(f'''
-select 
-  min(event_time) as earliest, 
-  max(event_time) as latest, 
-  count(*) as total_events, 
-  service_name, 
-  action_name,  
-  count(distinct source_ip_address) as num_source_ips, 
+display(spark.sql('''
+select
+  min(event_time) as earliest,
+  max(event_time) as latest,
+  count(*) as total_events,
+  service_name,
+  action_name,
+  count(distinct source_ip_address) as num_source_ips,
   count(distinct user_agent) as num_useragents
-from system.access.audit 
-where user_identity.email = '{{USER_EMAIL}}' and event_time between '{{EARLIEST}}' and '{{LATEST}}' 
-group by all 
+from system.access.audit
+where user_identity.email = :user_email and event_time between :earliest and :latest
+group by all
 order by earliest desc
-'''))
+''', args={{"user_email": USER_EMAIL, "earliest": EARLIEST, "latest": LATEST}}))
 
 {command}
 
@@ -400,17 +423,17 @@ order by earliest desc
 
 {command}
 
-display(spark.sql(f'''
-select 
+display(spark.sql('''
+select
   usage_date,
   sku_name,
   sum(usage_quantity) as DBU_used
 from system.billing.usage
-where 
+where
   usage_unit="DBU" and
-  identity_metadata.created_by = '{{USER_EMAIL}}' and usage_start_time between '{{EARLIEST}}' and '{{LATEST}}'
+  identity_metadata.created_by = :user_email and usage_start_time between :earliest and :latest
 group by all
-'''))
+''', args={{"user_email": USER_EMAIL, "earliest": EARLIEST, "latest": LATEST}}))
 
 {command}
 
@@ -447,21 +470,20 @@ detection_triggered = False
         {"field": "severity", "label": "Severity"},
     ]
     for detection_name, config in sorted_detections:
-        # Get clean display name
-        display_name = config.get('name', detection_name.replace('_', ' ').title())
-        description = config.get('description', 'No description available')
-        objective = config.get('objective', '')
-        
+        # Sanitize display name and metadata for safe embedding
+        display_name = _sanitize_for_markdown(config.get('name', detection_name.replace('_', ' ').title()))
+
         notebook_content += f"""
 {command}
 
 {magic} %md
 {magic} ### {display_name}
-{magic} 
+{magic}
 """
         for field in fields:
-            if config.get(field["field"], '').strip():
-                notebook_content += f"""{magic} **{field["label"]}:** {config.get(field["field"], '').strip()}
+            field_val = _sanitize_for_markdown(config.get(field["field"], ''))
+            if field_val:
+                notebook_content += f"""{magic} **{field["label"]}:** {field_val}
 
 """
         notebook_content += f"""{magic} **Detection File:** `{detection_name}.py`
@@ -473,7 +495,7 @@ detection_triggered = False
 # Update summary statistics if detection triggered
 if detection_triggered:
     summary_stats["findings"] += 1
-    summary_stats["detections_triggered"].append(f"{display_name}")
+    summary_stats["detections_triggered"].append("{display_name}")
 
 """
     

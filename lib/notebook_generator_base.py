@@ -22,6 +22,31 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.workspace import ImportFormat, Language
 import io
 
+
+def _sanitize_for_markdown(text: str) -> str:
+    """Sanitize text for safe embedding in generated notebook markdown cells.
+
+    Strips characters that could break out of # MAGIC markdown context or
+    inject executable code.
+    """
+    if not text:
+        return ""
+    # Remove # MAGIC artifacts from notebook extraction
+    text = text.replace("# MAGIC ", "").replace("#MAGIC ", "")
+    # Strip triple quotes that could break Python string literals
+    text = text.replace('"""', '').replace("'''", "")
+    # Remove backtick-fenced code blocks that could inject executable content
+    text = re.sub(r'```\w*\n.*?```', '[code block removed]', text, flags=re.DOTALL)
+    return text.strip()
+
+
+def _sanitize_for_python_comment(text: str) -> str:
+    """Sanitize text for safe embedding in generated Python code comments."""
+    if not text:
+        return ""
+    # Remove newlines and limit length for single-line comment context
+    return text.replace('\n', ' ').replace('\r', '').strip()[:200]
+
 # Initialize workspace client
 w = WorkspaceClient()
 
@@ -276,7 +301,15 @@ def format_time_range(days: int = None, hours: int = None) -> Tuple[str, str]:
 
     Returns:
         Tuple of (earliest, latest) as formatted strings
+
+    Raises:
+        ValueError: If days or hours is not a positive number
     """
+    if days is not None and days < 1:
+        raise ValueError(f"days must be a positive integer, got: {days}")
+    if hours is not None and hours < 1:
+        raise ValueError(f"hours must be a positive integer, got: {hours}")
+
     latest = datetime.now()
 
     if days:
@@ -332,8 +365,11 @@ def generate_detection_code(detection_name: str, config: Dict, earliest: str, la
 
     function_call = f"{config['function_name']}({', '.join(params)})"
 
+    # Sanitize detection name for safe embedding in generated code comment
+    safe_name = _sanitize_for_python_comment(config.get('name', detection_name))
+
     # Generate the code
-    code = f"""# Run detection: {config.get('name', detection_name)}
+    code = f"""# Run detection: {safe_name}
 
 {config['full_function']}
 
@@ -381,7 +417,8 @@ def generate_threat_model_notebook(threat_model: str, threat_model_title: str,
     """
 
     # Get official risk description (THREAT_MODEL_RISK_DESCRIPTIONS loaded via %run)
-    risk_description = THREAT_MODEL_RISK_DESCRIPTIONS.get(threat_model, "No risk description available.")
+    risk_description = _sanitize_for_markdown(THREAT_MODEL_RISK_DESCRIPTIONS.get(threat_model, "No risk description available."))
+    threat_model_description = _sanitize_for_markdown(threat_model_description)
 
     # Calculate time ranges
     behavioral_earliest, behavioral_latest = format_time_range(days=time_range_days)
@@ -479,7 +516,7 @@ detection_triggered = False
 """
 
         for detection_name, config in binary_detections:
-            display_name = config.get('name', detection_name.replace('_', ' ').title())
+            display_name = _sanitize_for_markdown(config.get('name', detection_name.replace('_', ' ').title()))
 
             notebook_content += f"""
 {command}
@@ -488,25 +525,13 @@ detection_triggered = False
 {magic} ### {display_name}
 {magic}
 """
-            # Add metadata fields
-            if config.get('description', '').strip():
-                notebook_content += f"""{magic} **Description:** {config['description']}
-{magic}
-"""
-            if config.get('objective', '').strip():
-                notebook_content += f"""{magic} **Objective:** {config['objective']}
-{magic}
-"""
-            if config.get('severity', '').strip():
-                notebook_content += f"""{magic} **Severity:** {config['severity']}
-{magic}
-"""
-            if config.get('fidelity', '').strip():
-                notebook_content += f"""{magic} **Fidelity:** {config['fidelity']}
-{magic}
-"""
-            if config.get('false_positives', '').strip():
-                notebook_content += f"""{magic} **False Positives:** {config['false_positives']}
+            # Add sanitized metadata fields
+            for field_key, field_label in [('description', 'Description'), ('objective', 'Objective'),
+                                           ('severity', 'Severity'), ('fidelity', 'Fidelity'),
+                                           ('false_positives', 'False Positives')]:
+                field_val = _sanitize_for_markdown(config.get(field_key, ''))
+                if field_val:
+                    notebook_content += f"""{magic} **{field_label}:** {field_val}
 {magic}
 """
 
@@ -519,7 +544,7 @@ detection_triggered = False
 # Update summary statistics if detection triggered
 if detection_triggered:
     summary_stats["findings"] += 1
-    summary_stats["detections_triggered"].append(f"{display_name} (Binary)")
+    summary_stats["detections_triggered"].append("{display_name} (Binary)")
 
 """
 
@@ -537,7 +562,7 @@ if detection_triggered:
 """
 
         for detection_name, config in behavioral_detections:
-            display_name = config.get('name', detection_name.replace('_', ' ').title())
+            display_name = _sanitize_for_markdown(config.get('name', detection_name.replace('_', ' ').title()))
 
             notebook_content += f"""
 {command}
@@ -546,25 +571,13 @@ if detection_triggered:
 {magic} ### {display_name}
 {magic}
 """
-            # Add metadata fields
-            if config.get('description', '').strip():
-                notebook_content += f"""{magic} **Description:** {config['description']}
-{magic}
-"""
-            if config.get('objective', '').strip():
-                notebook_content += f"""{magic} **Objective:** {config['objective']}
-{magic}
-"""
-            if config.get('severity', '').strip():
-                notebook_content += f"""{magic} **Severity:** {config['severity']}
-{magic}
-"""
-            if config.get('fidelity', '').strip():
-                notebook_content += f"""{magic} **Fidelity:** {config['fidelity']}
-{magic}
-"""
-            if config.get('false_positives', '').strip():
-                notebook_content += f"""{magic} **False Positives:** {config['false_positives']}
+            # Add sanitized metadata fields
+            for field_key, field_label in [('description', 'Description'), ('objective', 'Objective'),
+                                           ('severity', 'Severity'), ('fidelity', 'Fidelity'),
+                                           ('false_positives', 'False Positives')]:
+                field_val = _sanitize_for_markdown(config.get(field_key, ''))
+                if field_val:
+                    notebook_content += f"""{magic} **{field_label}:** {field_val}
 {magic}
 """
 
@@ -577,7 +590,7 @@ if detection_triggered:
 # Update summary statistics if detection triggered
 if detection_triggered:
     summary_stats["findings"] += 1
-    summary_stats["detections_triggered"].append(f"{display_name} (Behavioral)")
+    summary_stats["detections_triggered"].append("{display_name} (Behavioral)")
 
 """
 
