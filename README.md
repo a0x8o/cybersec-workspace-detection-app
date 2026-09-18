@@ -6,17 +6,52 @@ A collection of security detection notebooks for Databricks workspaces that anal
 
 ### What's Inside
 
-This tool provides **34 security detections** organized by urgency and investigation approach:
+This tool provides **35 security detections** organized by urgency and investigation approach:
 - **16 Event-based Detections** - High-confidence alerts for immediate response (24-hour default window)
-- **18 Behavioral Detections** - Pattern analysis for threat hunting (30-day default window)
+- **19 Behavioral Detections** - Pattern analysis for threat hunting (30-day default window)
 
-### Three Ways to Use This Tool
+### Four Ways to Use This Tool
 
-1. **🎯 Threat Model Investigations** - Generate investigation notebooks for 7 specific threat scenarios (Recommended for newcomers)
-2. **📊 User Behavior Analysis** - Generate user-specific activity reports
-3. **🔍 Individual Detections** - Execute specific detection notebooks for targeted analysis
+1. **💬 Genie Agent** - Ask questions in plain English instead of running notebooks (Recommended for investigations)
+2. **🎯 Threat Model Investigations** - Generate investigation notebooks for 7 specific threat scenarios (Recommended for newcomers)
+3. **📊 User Behavior Analysis** - Generate user-specific activity reports
+4. **🔍 Individual Detections** - Execute specific detection notebooks for targeted analysis
 
 👉 **New to this tool?** Start with [Threat Model Investigations](#threat-model-investigations) to investigate common security scenarios.
+
+👉 **Investigating something right now?** Use the [Genie Agent](#genie-agent---ask-your-audit-logs-questions) and just ask.
+
+---
+
+## Genie Agent - Ask Your Audit Logs Questions
+
+Every detection in this repo is also available as a **Genie Agent**, so you can type
+
+> *"Who changed our IP allow list last week?"*
+
+instead of opening a notebook and editing widget parameters.
+
+**Install it from a Git folder — no CLI, no local setup:**
+
+1. **Workspace → Create → Git folder** → this repo's URL
+2. Open **`genie-agent/deploy/install_notebook`**
+3. Attach compute (**Serverless works**), fill in the **catalog** widget, **Run all**
+
+The last cell prints your agent's URL.
+
+That installs all 35 detections as Unity Catalog SQL functions and creates the
+agent. A CLI installer (`genie-agent/deploy/install.py`) is also provided for
+workspaces that cannot reach GitHub.
+
+**Questions it answers:** IP access list changes, admin privilege grants, token
+creation, group and MFA changes, SSO configuration, data movement, secrets
+discovery, session anomalies, bulk notebook export, audit-logging evasion.
+
+**This complements the scheduled notebooks — it does not replace them.** The
+notebooks run unattended and produce alerts; the agent answers questions while you
+investigate. Keep both.
+
+Full guide, limits, and troubleshooting: **[genie-agent/README.md](genie-agent/README.md)**
 
 ---
 
@@ -27,7 +62,7 @@ cybersec-workspace-detection-app/
 ├── base/
 │   ├── detections/
 │   │   ├── event-based/     # 16 event-based detections (24-hour window)
-│   │   └── behavioral/      # 18 threat hunting detections (30-day window)
+│   │   └── behavioral/      # 19 threat hunting detections (30-day window)
 │   └── notebooks/
 │       ├── threat_models/   # 7 threat model notebook generators
 │       │   ├── threat_model_account_takeover.py
@@ -54,8 +89,8 @@ Generate focused investigation notebooks combining multiple detections for speci
 | Threat Model | Detections | Risk Description (Source: Databricks SBP) |
 |-------------|-----------|-------------------------------------------|
 | **Account Takeover or Compromise** | 17 detections | Databricks is a general-purpose compute platform that customers can set up to access critical data sources. If credentials belonging to a user were compromised by phishing, brute force, or other methods, an attacker might get access to all of the data accessible by the compromised user from the environment. |
-| **Data Exfiltration** | 8 detections | If a malicious user or an attacker is able to log into a customer's environment, they may be able to exfiltrate sensitive data and then store it, sell it, or ransom it. |
-| **Insider Threat** | 14 detections | High-performing engineers and data professionals will generally find the best or fastest way to complete their tasks, but sometimes that may do so in ways that create security impacts to their organizations. One user may think their job would be much easier if they didn't have to deal with security controls, or another might copy some data to simplify sharing of data. |
+| **Data Exfiltration** | 9 detections | If a malicious user or an attacker is able to log into a customer's environment, they may be able to exfiltrate sensitive data and then store it, sell it, or ransom it. |
+| **Insider Threat** | 15 detections | High-performing engineers and data professionals will generally find the best or fastest way to complete their tasks, but sometimes that may do so in ways that create security impacts to their organizations. One user may think their job would be much easier if they didn't have to deal with security controls, or another might copy some data to simplify sharing of data. |
 | **Supply Chain Attacks** | 3 detections | Historically, supply chain attacks have relied upon injecting malicious code into software libraries. More recently, we have started to see the emergence of AI model and data supply chain attacks, whereby the model, its weights or the data itself is maliciously altered. |
 | **Potential Compromise of Databricks** | 4 detections | Security-minded customers sometimes voice a concern that Databricks itself might be compromised, which could result in the compromise of their environment. |
 | **Ransomware Attacks** | 9 detections | Ransomware is a type of malware designed to deny an individual or organization access to their data, usually for the purposes of extortion. Encryption is often used as the vehicle for this attack. |
@@ -155,7 +190,7 @@ The notebook will run all detections filtered to the specified user and display 
 - Metastore Admin Privilege Granted - `/base/detections/event-based/metastore_admin_privilege_granted.py`
 - Workspace Admin Privileged Role Assignment - `/base/detections/event-based/workspace_admin_privileged_role_assignment.py`
 
-### Behavioral Detections (18 Total)
+### Behavioral Detections (19 Total)
 
 **Purpose**: Pattern analysis and threat hunting
 **Time Window**: 30 days (configurable)
@@ -177,10 +212,11 @@ The notebook will run all detections filtered to the specified user and display 
 - Token Scanning Activity - `/base/detections/behavioral/token_scanning_activity.py`
 - Secret Scanning Activity - `/base/detections/behavioral/secret_scanning_activity.py`
 
-#### Data Movement & Exfiltration (3)
+#### Data Movement & Exfiltration (4)
 - Potential Data Movement via SQL Queries - `/base/detections/behavioral/potential_data_movement_sql_queries.py`
 - Potential Data Movement via Workspace Downloads - `/base/detections/behavioral/potential_data_movement_workspace_downloads.py`
 - Potential Data Movement via Explicit Credentials - `/base/detections/behavioral/potential_data_movement_explicit_creds.py`
+- Bulk Notebook Export - `/base/detections/behavioral/bulk_notebook_export.py`
 
 #### User & Group Management (5)
 - User Account Created - `/base/detections/behavioral/user_account_created.py`

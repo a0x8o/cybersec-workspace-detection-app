@@ -101,6 +101,10 @@ THREAT_MODEL_MAPPINGS = {
         "behavioral/potential_data_movement_explicit_creds",
         "behavioral/potential_data_movement_sql_queries",
         "behavioral/potential_data_movement_workspace_downloads",
+        "behavioral/bulk_notebook_export",
+
+        # Obfuscated/encoded command execution
+        "behavioral/encoded_command_execution",
 
         # Credential/token abuse
         "behavioral/access_token_created",
@@ -117,6 +121,10 @@ THREAT_MODEL_MAPPINGS = {
         "behavioral/potential_data_movement_explicit_creds",
         "behavioral/potential_data_movement_sql_queries",
         "behavioral/potential_data_movement_workspace_downloads",
+        "behavioral/bulk_notebook_export",
+
+        # Obfuscated/encoded command execution
+        "behavioral/encoded_command_execution",
 
         # Administrative abuse & privilege escalation
         "event-based/user_admin_account_change",
