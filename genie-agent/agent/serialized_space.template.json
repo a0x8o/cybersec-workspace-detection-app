@@ -76,6 +76,23 @@
             "enable_format_assistance": true
           }
         ]
+      },
+      {
+        "identifier": "system.query.history",
+        "column_configs": [
+          { "column_name": "account_id", "enable_format_assistance": true },
+          { "column_name": "workspace_id", "enable_format_assistance": true },
+          { "column_name": "statement_id", "enable_format_assistance": true },
+          { "column_name": "statement_text" },
+          { "column_name": "statement_type", "enable_format_assistance": true, "enable_entity_matching": true },
+          { "column_name": "execution_status", "enable_format_assistance": true, "enable_entity_matching": true },
+          { "column_name": "executed_by", "enable_format_assistance": true, "enable_entity_matching": true },
+          { "column_name": "executed_as", "enable_format_assistance": true, "enable_entity_matching": true },
+          { "column_name": "start_time", "enable_format_assistance": true },
+          { "column_name": "end_time", "enable_format_assistance": true },
+          { "column_name": "client_application", "enable_format_assistance": true, "enable_entity_matching": true },
+          { "column_name": "compute" }
+        ]
       }
     ]
   },
@@ -1351,6 +1368,42 @@
         ]
       },
       {
+        "id": "ecf5a9c150ff4b55806846940f1da00a",
+        "question": [
+          "detect_encoded_command_execution"
+        ],
+        "sql": [
+          "SELECT *\n",
+          "FROM ${catalog}.${schema}.detect_encoded_command_execution(\n",
+          "  :start_time,\n",
+          "  :end_time",
+          "\n)"
+        ],
+        "parameters": [
+          {
+            "name": "start_time",
+            "type_hint": "DATETIME",
+            "default_value": {
+              "values": [
+                "now-30d/s"
+              ]
+            }
+          },
+          {
+            "name": "end_time",
+            "type_hint": "DATETIME",
+            "default_value": {
+              "values": [
+                "now/s"
+              ]
+            }
+          }
+        ],
+        "usage_guidance": [
+          "SQL statements or notebook/job commands that decode a hex or base64 payload at runtime (UNHEX(), xxd -r, base64 -d | bash, printf hex | bash) to obfuscate an executed command. MITRE T1027 Obfuscated Files or Information, T1059 Command and Scripting Interpreter, TA0005 Defense Evasion. Reads BOTH system.query.history AND system.access.audit (notebook + job command events); requires SELECT on system.query.history. statement_text carries the payload itself -- SENSITIVE, redact before sharing. Legitimate UNHEX/base64 data engineering is the expected false positive. Use for: encoded command execution, obfuscated commands, hex encoded payload, base64 decode and execute, UNHEX, xxd, obfuscation, defense evasion, hidden shell command, encoded reverse shell, command injection obfuscation."
+        ]
+      },
+      {
         "id": "ee355dbeca7f49b191ab6943ecfb7962",
         "question": [
           "detect_metastore_admin_granted"
@@ -1421,6 +1474,42 @@
         ],
         "usage_guidance": [
           "Every workspace-level configuration change (all workspaceConfEdit events) with the setting key and its new value. Broader than the high-priority function, which triages only the security-relevant subset -- use this one when you need a COMPLETE workspace config changelog. MITRE T1484 Domain or Tenant Policy Modification. Use for: all workspace configuration changes, complete config changelog, every setting that changed, workspace settings audit, what settings were modified, workspaceConfEdit."
+        ]
+      },
+      {
+        "id": "b11c42cc4f0742d6bb8ff5aa2255ca8c",
+        "question": [
+          "detect_investigation_triage"
+        ],
+        "sql": [
+          "SELECT *\n",
+          "FROM ${catalog}.${schema}.detect_investigation_triage(\n",
+          "  :start_time,\n",
+          "  :end_time",
+          "\n)"
+        ],
+        "parameters": [
+          {
+            "name": "start_time",
+            "type_hint": "DATETIME",
+            "default_value": {
+              "values": [
+                "now-30d/s"
+              ]
+            }
+          },
+          {
+            "name": "end_time",
+            "type_hint": "DATETIME",
+            "default_value": {
+              "values": [
+                "now/s"
+              ]
+            }
+          }
+        ],
+        "usage_guidance": [
+          "Investigation triage and starting point: ranks actors and their source IPs by how many distinct security-sensitive control actions they touched in the window (breadth across families first, then failed attempts, then volume), so the investigation lead surfaces without a raw sweep. Excludes routine logins by design. Run this FIRST for any open-ended investigation, then pivot on the top actor/IP with the per-family detection queries. Use for: where do I start, triage, who looks suspicious, rank actors by risk, investigation starting point, who touched the most security controls, find the lead, who should I investigate first, suspicious activity overview, prioritize actors for review."
         ]
       }
     ]
