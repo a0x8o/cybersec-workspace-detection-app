@@ -144,7 +144,7 @@ def bulk_notebook_export(
     # Notebook export events in range, excluding self-home exports (platform/tooling noise).
     exports = df.filter(
         (col("action_name") == "workspaceExport") &
-        (col("event_time").between(earliest, latest)) &
+        window_filter(earliest, latest) &
         (~contains(col("request_params.notebookFullPath"), col("user_identity.email")))
     ).select(
         to_date(col("event_time")).alias("event_date"),
@@ -204,8 +204,8 @@ def bulk_notebook_export(
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
-    earliest, latest = get_time_range_from_widgets()
+if __name__ == "__main__" or widget_exists("earliest"):
+    earliest, latest = get_time_range_from_widgets(default_hours=30*24)
     display(bulk_notebook_export(
         earliest=dbutils.widgets.get("earliest"),
         latest=dbutils.widgets.get("latest")

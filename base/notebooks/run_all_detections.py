@@ -13,6 +13,8 @@
 
 # COMMAND ----------
 
-# workspace_dir is now derived automatically from the current notebook path
-# This works on both classic compute and serverless
-run_all_detections(earliest="2025-06-15 12:00:00", latest="2025-12-10 12:00:00")
+# workspace_dir is derived automatically from the current notebook path.
+# Time window comes from the earliest/latest widgets (default: last 24 hours),
+# so a scheduled run always scans a fresh window instead of a fixed one.
+earliest, latest = get_time_range_from_widgets()
+run_all_detections(earliest=earliest, latest=latest)

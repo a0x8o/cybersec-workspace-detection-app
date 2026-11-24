@@ -14,13 +14,18 @@ requirements:
   platform:
   - classic
   - serverless
-installation: No specific installation is required to run notebooks. Simply add the
-  applicable notebooks as workflows after amending the start and end times for detection
-  searches.
+installation: No specific installation is required to run notebooks manually.
+  For production scheduling, deploy the bundled Databricks Asset Bundle
+  (databricks.yml) which defines two serverless jobs - event-based every 6
+  hours and behavioral daily. Alternatively, add the applicable notebooks as
+  workflows after amending the start and end times for detection searches.
 configuration: Detection searches rely on access to the audit table, and execution
-  using workflows. The detections are expected to be ran in batch mode. Ensure the
-  trigger schedule matches the lookback period to ensure full coverage, and avoid
-  duplicate events on subsequent runs.
+  using workflows. The detections are expected to be ran in batch mode. Audit
+  events can arrive in system.access.audit after the fact, so prefer a lookback
+  window slightly longer than the trigger interval (e.g. 25h lookback on a daily
+  schedule) and deduplicate by alert_id in the alerts Delta table rather than
+  relying on non-overlapping windows. Requires DBR 15.x+ on classic compute
+  (named SQL parameters); serverless is fully supported.
 logo: metadata/logo.png
 screenshots: []
 release_date: '2025-05-09'

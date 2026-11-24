@@ -9,7 +9,7 @@
 # MAGIC   author: David Veuve - Databricks
 # MAGIC   created: '2025-06-04T12:00:00'
 # MAGIC   modified: '2025-06-04T12:00:00'
-# MAGIC   uuid: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+# MAGIC   uuid: ec239054-5222-42e5-a425-16edb1a92655
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Workspace Configuration Changes
@@ -79,7 +79,7 @@ def configuration_changes_workspace_level(earliest: str = None, latest: str = No
     # Filter for workspace configuration changes
     df_filtered = df.filter(
         (col("action_name") == "workspaceConfEdit") &
-        (col("event_time").between(earliest, latest))
+        window_filter(earliest, latest)
     ).select(
         to_timestamp(col("event_time")).alias("EVENT_TIME"),
         col("service_name").alias("SERVICE_NAME"),
@@ -101,7 +101,7 @@ def configuration_changes_workspace_level(earliest: str = None, latest: str = No
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(configuration_changes_workspace_level(
         earliest=dbutils.widgets.get("earliest"),

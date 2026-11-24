@@ -9,7 +9,7 @@
 # MAGIC   author: David Veuve - Databricks
 # MAGIC   created: '2025-06-04T12:00:00'
 # MAGIC   modified: '2025-06-04T12:00:00'
-# MAGIC   uuid: 4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a
+# MAGIC   uuid: 0542955b-03dc-4796-9301-522f0d2ecbde
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Admin User Account Changes
@@ -91,7 +91,7 @@ def user_admin_account_change(earliest: str = None, latest: str = None):
     
     # Filter for admin-related changes
     df_filtered = df.filter(
-        (col("event_time").between(earliest, latest)) &
+        window_filter(earliest, latest) &
         (
             # Direct admin privilege actions
             (col("action_name").isin(direct_admin_actions)) |
@@ -120,7 +120,7 @@ def user_admin_account_change(earliest: str = None, latest: str = None):
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(user_admin_account_change(
         earliest=dbutils.widgets.get("earliest"),

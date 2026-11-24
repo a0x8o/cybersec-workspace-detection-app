@@ -67,7 +67,7 @@ def sso_config_changed(earliest:str = None, latest: str = None):
     df_filtered = df.filter(
         (col("service_name") == "ssoConfigBackend") &
         (col("action_name").isin("create", "update")) &
-        (col("event_time") >= earliest) & (col("event_time") <= latest)
+        window_filter(earliest, latest)
     ).select(
         to_timestamp(col("event_time")).alias("EVENT_DATE"),
         col("service_name").alias("SERVICE"),
@@ -86,7 +86,7 @@ def sso_config_changed(earliest:str = None, latest: str = None):
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(sso_config_changed(
         earliest=dbutils.widgets.get("earliest"),

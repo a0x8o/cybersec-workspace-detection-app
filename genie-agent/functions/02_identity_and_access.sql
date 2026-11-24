@@ -58,6 +58,7 @@ RETURN
   WHERE a.service_name = 'accounts'
     AND a.action_name = 'generateDbToken'
     AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND ROUND((unix_timestamp(from_unixtime(CAST(a.request_params['tokenExpirationTime'] AS BIGINT) / 1000))
            - unix_timestamp(a.event_time)) / 3600 / 24, 0) > 0;
 
@@ -90,7 +91,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.service_name = 'accounts'
     AND a.action_name = 'revokeDbToken'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- Account admin granted. Port of
@@ -141,6 +143,7 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.service_name = 'accounts'
     AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND (
       a.action_name IN ('setAccountAdmin', 'changeAccountOwner')
       OR (
@@ -198,6 +201,7 @@ RETURN
     a.request_params
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND (
       (a.action_name = 'updateMetastore' AND a.request_params['owner'] IS NOT NULL)
       OR (
@@ -254,6 +258,7 @@ RETURN
     a.request_params
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND (
       a.action_name IN ('setAdmin', 'removeAdmin')
       OR (
@@ -305,7 +310,8 @@ RETURN
     AND a.action_name = 'add'
     AND CAST(a.response.status_code AS INT) = 200
     AND a.request_params['endpoint'] = 'adminConsole'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- User account deleted. Port of binary/user_account_deleted.py.
@@ -336,7 +342,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.service_name = 'accounts'
     AND a.action_name = 'delete'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- Admin/user account attribute changes. Port of
@@ -371,7 +378,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.service_name = 'accounts'
     AND a.action_name = 'updateUser'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- User role modified. Port of event-based/user_role_modified.py.
@@ -404,6 +412,7 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.service_name = 'accounts'
     AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND (a.request_params['endpoint'] IN ('roleAssignment', 'permissionAssignment')
          OR a.action_name IN ('updateRoleAssignment', 'setRoleAssignment'));
 
@@ -438,7 +447,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.service_name = 'accounts'
     AND a.action_name = 'changePassword'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- MFA key added / removed. Ports of behavioral/mfa_key_added.py and
@@ -474,7 +484,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.service_name = 'accounts'
     AND a.action_name IN ('mfaAddKey', 'mfaDeleteKey')
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- Group lifecycle + membership. Ports of behavioral/group_created.py,
@@ -527,7 +538,8 @@ RETURN
   WHERE a.service_name = 'accounts'
     AND a.action_name IN ('createGroup', 'removeGroup', 'addPrincipalToGroup',
                           'addPrincipalsToGroup', 'removePrincipalFromGroup')
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- Non-SSO login. Port of behavioral/non_sso_login_detected.py.
@@ -569,7 +581,8 @@ RETURN
                           'passwordVerifyAuthentication', 'samlLogin')
     AND COALESCE(a.request_params['authentication_method'], '') <> 'BROWSER_BYO_IDP_SAML'
     AND a.response.status_code = 200
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- Databricks employee logon. Port of event-based/databricks_employee_logon.py.
@@ -612,7 +625,8 @@ RETURN
     AND a.request_params['authentication_method'] = 'GENIE_AUTH'
     AND a.response.status_code = 200
     AND a.audit_level = 'WORKSPACE_LEVEL'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- SSO configuration changed. Port of event-based/sso_config_changed.py.
@@ -644,6 +658,7 @@ RETURN
     a.request_params
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND (
       lower(a.action_name) LIKE '%sso%'
       OR lower(a.action_name) LIKE '%samlconfig%'

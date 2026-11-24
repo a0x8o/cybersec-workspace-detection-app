@@ -153,7 +153,7 @@ This document records the key architectural and design decisions made in the Dat
 **Rationale**:
 - **Separation of concerns**: Detection functions focus purely on identifying suspicious activity and returning a DataFrame. The output transformation (alert formatting, deduplication, Delta merge) is handled by the decorator, not the detection.
 - **Standardized alert schema**: `alerts_schema` defines a consistent structure (`alert_id`, `alertTime`, `eventTime`, `user_email`, `event_type`, `source_ip`, `event_data` as JSON) that downstream consumers (SIEM integration, dashboards, notification systems) can rely on.
-- **Deduplication via Delta merge**: `_write_alerts()` uses `DeltaTable.merge()` keyed on `alert_id` (UUID) to prevent duplicate alerts when detections are re-run on overlapping time windows.
+- **Deduplication via Delta merge**: `_write_alerts()` uses `DeltaTable.merge()` keyed on `alert_id` (SHA-256 hash of the event payload, stable across reruns) to prevent duplicate alerts when detections are re-run on overlapping time windows.
 - **Transparent wrapping**: Using `functools.wraps` preserves the original function's name and docstring. The decorator supports both `@detect` (no args) and `@detect(output=Output.asAlert)` syntax via `functools.partial`.
 
 **Tradeoff**: The alert transformation in `_alerts_df()` assumes specific column names in the detection output (`EVENT_DATE`, `SRC_USER`, `ACTION`, `SRC_IP`). Detections that use different column names would need to conform or the alert will contain null values. There is no compile-time validation of this contract.
@@ -182,11 +182,11 @@ This document records the key architectural and design decisions made in the Dat
 **Context**: The app is distributed through Databricks workspace repos and potentially through the Databricks marketplace. Different consumers need different views of the same information.
 
 **Rationale**:
-- **`manifest.yaml`**: Machine-readable app manifest. Lists every notebook (34 detections + 7 generators + user behavior analysis) with full `dscc` metadata (UUID, author, content type, detection name/description/objective). Used by Databricks tooling for app registration and discovery. Contains unique UUIDs per detection for tracking.
+- **`manifest.yaml`**: Machine-readable app manifest. Lists every notebook (36 detections + 7 generators + user behavior analysis) with full `dscc` metadata (UUID, author, content type, detection name/description/objective). Used by Databricks tooling for app registration and discovery. Contains unique UUIDs per detection for tracking.
 - **`metadata/meta.yaml`**: Marketplace submission metadata. Contains app-level information (name, version, author email, platform requirements, installation instructions, release dates). Does not list individual detections. Used for Databricks Exchange/marketplace publishing.
 - **`docs/detection_tracker.md`**: Human-readable documentation. Organizes detections by category (event-based vs. behavioral, then by subcategory like "Authentication & Session Patterns"). Includes severity ratings, threat model cross-references, and a "Planned" section for future detections. Used by security engineers evaluating detection coverage.
 
-**Tradeoff**: Keeping three files in sync requires discipline. The manifest historically fell behind (covering only 22 of 34 detections) and contained stale artifacts (`# MAGIC` in descriptions, duplicate UUIDs, wrong detection names). Automated validation would prevent this drift but is not currently implemented.
+**Tradeoff**: Keeping three files in sync requires discipline. The manifest historically fell behind (covering only 22 of 36 detections) and contained stale artifacts (`# MAGIC` in descriptions, duplicate UUIDs, wrong detection names). Automated validation would prevent this drift but is not currently implemented.
 
 ---
 

@@ -77,7 +77,7 @@ def encoded_command_execution(earliest: str = None, latest: str = None, target_u
     qh = spark.table("system.query.history")
 
     qh_filtered = qh.filter(
-        (col("start_time").between(earliest, latest)) &
+        window_filter(earliest, latest, time_col="start_time") &
         (
             # UNHEX() used to decode a hex string inside SQL
             upper(col("statement_text")).contains("UNHEX(") |
@@ -125,7 +125,7 @@ def encoded_command_execution(earliest: str = None, latest: str = None, target_u
     # by ~500x, and a scheduled job task is exactly where an encoded payload would live
     # (it also buys the attacker persistence and a schedule), so all three are in scope.
     audit_filtered = audit.filter(
-        (col("event_time").between(earliest, latest)) &
+        window_filter(earliest, latest) &
         (col("service_name").isin("notebook", "jobs")) &
         (col("action_name").isin("runCommand", "submitCommand")) &
         (
@@ -166,8 +166,8 @@ def encoded_command_execution(earliest: str = None, latest: str = None, target_u
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
-    earliest, latest = get_time_range_from_widgets()
+if __name__ == "__main__" or widget_exists("earliest"):
+    earliest, latest = get_time_range_from_widgets(default_hours=30*24)
     display(encoded_command_execution(
         earliest=dbutils.widgets.get("earliest"),
         latest=dbutils.widgets.get("latest")

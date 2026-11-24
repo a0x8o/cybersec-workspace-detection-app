@@ -47,7 +47,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.action_name IN ('mount', 'createStorageCredential', 'updateStorageCredential',
                           'createConnection', 'updateConnection')
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- COPY INTO with inline credentials, from query history.
@@ -88,6 +89,7 @@ RETURN
     q.statement_text
   FROM system.query.history AS q
   WHERE q.start_time BETWEEN start_time AND end_time
+  AND q.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND upper(q.statement_text) LIKE '%COPY INTO%'
     AND upper(q.statement_text) LIKE '%CREDENTIALS%';
 
@@ -133,6 +135,7 @@ RETURN
     MAX(a.event_time) AS last_seen
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND (
       a.action_name IN ('downloadPreviewResults', 'downloadLargeResults', 'filesGet',
                         'getModelVersionDownloadUri', 'getModelVersionSignedDownloadUri')
@@ -183,6 +186,7 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.action_name IN ('listScopes', 'getSecret')
     AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
   GROUP BY to_date(a.event_time), a.user_identity.email
   HAVING SUM(CASE WHEN a.action_name = 'listScopes' THEN 1 ELSE 0 END) >= scopes_threshold
      AND SIZE(COLLECT_SET(CONCAT(COALESCE(a.request_params['scope'], ''), ':',
@@ -221,6 +225,7 @@ RETURN
     COUNT(*)            AS events
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND (lower(a.user_agent) LIKE '%trufflehog%'
       OR lower(a.user_agent) LIKE '%gitleaks%'
       OR lower(a.user_agent) LIKE '%secretscan%')
@@ -267,6 +272,7 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.request_params['authenticationMethod'] = 'API_EXT_PAT_TOKEN'
     AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND a.request_params['tokenId'] IS NOT NULL
   GROUP BY a.request_params['tokenId'];
 
@@ -307,6 +313,7 @@ RETURN
     MAX(a.request_params['commandText']) AS sample_command
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND a.request_params['commandText'] IS NOT NULL
     AND upper(a.request_params['commandText']) NOT LIKE '%THIS IS A SYSTEM GENERATED QUERY%'
     AND (upper(a.request_params['commandText']) LIKE '%CREATE USER%'
@@ -394,6 +401,7 @@ RETURN
     FROM system.access.audit AS a
     WHERE a.action_name = 'workspaceExport'
       AND a.event_time BETWEEN start_time AND end_time
+      AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
       AND NOT contains(COALESCE(a.request_params['notebookFullPath'], ''),
                        COALESCE(a.user_identity.email, ' '))
   ),

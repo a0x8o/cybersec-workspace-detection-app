@@ -9,7 +9,7 @@
 # MAGIC   author: Kotaiba Alachkar
 # MAGIC   created: '2026-02-06T12:00:00'
 # MAGIC   modified: '2026-02-06T12:00:00'
-# MAGIC   uuid: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+# MAGIC   uuid: 5856fae9-4e83-4f63-89b0-f0fb08de9cc6
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Metastore Admin Privilege Granted
@@ -94,8 +94,7 @@
 @detect(output=Output.asDataFrame)
 def metastore_admin_privilege_granted(earliest: str = None, latest: str = None, metastore_admin_groups: str = ""):
     from pyspark.sql.functions import (col, current_timestamp, expr, to_timestamp,
-                                       lit, coalesce, when, struct, to_json)
-    import uuid
+                                       lit, coalesce, when, struct, to_json, sha2)
 
     earliest = earliest or current_timestamp() - expr("INTERVAL 24 hours")
     latest = latest or current_timestamp()
@@ -112,7 +111,7 @@ def metastore_admin_privilege_granted(earliest: str = None, latest: str = None, 
     df = spark.table("system.access.audit")
 
     df_direct = df.filter(
-        (col("event_time").between(earliest, latest)) &
+        window_filter(earliest, latest) &
         (col("action_name").isin(direct_metastore_admin_actions)) &
         (col("request_params.owner").isNotNull())
     )
@@ -149,7 +148,7 @@ def metastore_admin_privilege_granted(earliest: str = None, latest: str = None, 
         expanded_group_list = list(set(group_list + child_groups))
 
         df_group_additions = df.filter(
-            (col("event_time").between(earliest, latest)) &
+            window_filter(earliest, latest) &
             (col("service_name") == "accounts") &
             (col("action_name").isin(group_membership_actions)) &
             (col("request_params.targetGroupName").isin(expanded_group_list))
@@ -160,7 +159,7 @@ def metastore_admin_privilege_granted(earliest: str = None, latest: str = None, 
         # No admin groups configured — capture all account-level group membership
         # events for manual triage rather than silently dropping them.
         df_all_group_additions = df.filter(
-            (col("event_time").between(earliest, latest)) &
+            window_filter(earliest, latest) &
             (col("service_name") == "accounts") &
             (col("action_name").isin(group_membership_actions))
         )
@@ -197,7 +196,8 @@ def metastore_admin_privilege_granted(earliest: str = None, latest: str = None, 
     )
 
     df_alert = df_detailed.select(
-        lit(str(uuid.uuid4())).alias("alert_id"),
+        # Deterministic alert id: same event -> same id across reruns (enables merge dedup)
+        sha2(to_json(struct([col(c) for c in df_detailed.columns])), 256).alias("alert_id"),
         current_timestamp().alias("alertTime"),
         col("EVENT_DATE").alias("eventTime"),
         col("SRC_USER").alias("src_user"),
@@ -214,7 +214,7 @@ def metastore_admin_privilege_granted(earliest: str = None, latest: str = None, 
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     dbutils.widgets.text("metastore_admin_groups", "", "Metastore Admin Groups (comma-separated)")
 

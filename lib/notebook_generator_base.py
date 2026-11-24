@@ -16,7 +16,7 @@
 import os
 import re
 import yaml
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Tuple, Any, List, Optional
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.workspace import ImportFormat, Language
@@ -310,7 +310,9 @@ def format_time_range(days: int = None, hours: int = None) -> Tuple[str, str]:
     if hours is not None and hours < 1:
         raise ValueError(f"hours must be a positive integer, got: {hours}")
 
-    latest = datetime.now()
+    # Audit event_time values are UTC - use UTC here so generated windows are
+    # correct regardless of the cluster's local timezone.
+    latest = datetime.now(timezone.utc)
 
     if days:
         earliest = latest - timedelta(days=days)
@@ -376,9 +378,10 @@ def generate_detection_code(detection_name: str, config: Dict, earliest: str, la
 try:
     result_df = {function_call}
 
-    # Check if we have results
-    if result_df is not None and result_df.count() > 0:
-        print(f"✓ Found {{result_df.count()}} events")
+    # Check if we have results (single count - one job, not two)
+    result_count = result_df.count() if result_df is not None else 0
+    if result_count > 0:
+        print(f"✓ Found {{result_count}} events")
         display(result_df)
         detection_triggered = True
     else:

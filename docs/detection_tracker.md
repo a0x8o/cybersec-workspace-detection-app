@@ -2,7 +2,7 @@
 
 Complete inventory of all security detections including existing implementations and planned additions.
 
-## Existing Detections (34 Total)
+## Existing Detections (36 Total)
 
 ### Event-based Detections (16)
 
@@ -27,7 +27,7 @@ High-confidence security events requiring immediate attention with 24-hour defau
 | Metastore Admin Privilege Granted | `/base/detections/event-based/metastore_admin_privilege_granted.py` | account_takeover, insider_threat | High | Detects metastore ownership changes or additions to metastore admin groups |
 | Workspace Admin Privileged Role Assignment | `/base/detections/event-based/workspace_admin_privileged_role_assignment.py` | account_takeover, insider_threat, databricks_compromise | High | Detects workspace admin privilege grants or additions to the system admins group |
 
-### Behavioral Detections (18)
+### Behavioral Detections (20)
 
 Pattern analysis over 30-day default time windows for threat hunting and investigation.
 
@@ -51,6 +51,8 @@ Pattern analysis over 30-day default time windows for threat hunting and investi
 | MFA Key Deleted | `/base/detections/behavioral/mfa_key_deleted.py` | account_takeover | 30 days | Medium | Detects MFA removal (potential bypass) |
 | Group Created | `/base/detections/behavioral/group_created.py` | - | 30 days | Low | Monitors group creation patterns |
 | Principal Added to Group | `/base/detections/behavioral/principal_added_to_group.py` | account_takeover | 30 days | Low | Monitors group membership additions |
+| Bulk Notebook Export | `/base/detections/behavioral/bulk_notebook_export.py` | data_exfiltration, insider_threat | 30 days | High | Detects anomalously high notebook export volume vs per-user baseline |
+| Encoded Command Execution | `/base/detections/behavioral/encoded_command_execution.py` | data_exfiltration, insider_threat | 30 days | High | Detects UNHEX/xxd/base64-encoded payloads executed via SQL or notebook commands |
 
 ---
 

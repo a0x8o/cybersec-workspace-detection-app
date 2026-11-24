@@ -95,11 +95,12 @@ def _sql(profile: str, warehouse_id: str, statement: str) -> None:
 def _split_statements(sql_text: str) -> List[str]:
     """Split a function file into individual CREATE FUNCTION statements.
 
-    Splits on ``;`` at end-of-line rather than every ``;`` -- semicolons appear
-    inside COMMENT text, and splitting on those would cut a statement in half.
+    Splits on ``;`` at end-of-line (or end-of-file) rather than every ``;`` --
+    semicolons appear inside COMMENT text, and splitting on those would cut a
+    statement in half.
     """
     out: List[str] = []
-    for chunk in sql_text.split(";\n"):
+    for chunk in re.split(r";\s*(?=\n|\Z)", sql_text):
         if "CREATE OR REPLACE FUNCTION" not in chunk:
             continue
         out.append(chunk[chunk.index("CREATE OR REPLACE FUNCTION") :].strip())

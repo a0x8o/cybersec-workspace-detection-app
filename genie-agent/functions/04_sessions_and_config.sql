@@ -48,6 +48,7 @@ RETURN
     MAX(a.event_time) AS last_seen
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND a.service_name = 'accounts'
     AND a.action_name IN ('login', 'tokenLogin', 'samlLogin', 'jwtLogin')
     AND a.user_identity.email IS NOT NULL
@@ -95,6 +96,7 @@ RETURN
     COUNT(*) AS events
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND a.service_name = 'accounts'
     AND a.action_name IN ('login', 'tokenLogin', 'samlLogin', 'jwtLogin')
     AND a.session_id IS NOT NULL
@@ -142,6 +144,7 @@ RETURN
     COUNT(*) AS events
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND a.session_id IS NOT NULL
     AND NOT a.source_ip_address RLIKE '^(10\\..*|192\\.168\\..*|172\\.(1[6-9]|2[0-9]|3[0-1])\\..*)$'
     AND NOT lower(COALESCE(a.user_agent, '')) RLIKE
@@ -191,7 +194,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.action_name = 'workspaceConfEdit'
     AND a.request_params['workspaceConfKeys'] = 'enableVerboseAuditLogs'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- --------------------------------------------------------------------------
 -- All workspace-level configuration changes.
@@ -229,4 +233,5 @@ RETURN
     a.user_agent
   FROM system.access.audit AS a
   WHERE a.action_name = 'workspaceConfEdit'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);

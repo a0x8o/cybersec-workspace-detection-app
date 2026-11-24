@@ -109,8 +109,7 @@ def spikes_in_admin_activity(earliest: str, latest: str, threshold: int = 0):
             upper(col("request_params.commandText")).like("%SHOW GRANT%") |
             upper(col("request_params.commandText")).like("%GRANT ROLE%")
         ) & 
-        (col("event_time") >= earliest) & 
-        (col("event_time") <= latest)
+        window_filter(earliest, latest)
     )
 
     # Aggregate data per user, IP, and date
@@ -149,8 +148,8 @@ def spikes_in_admin_activity(earliest: str, latest: str, threshold: int = 0):
 
 
 # COMMAND ----------
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
-    earliest, latest = get_time_range_from_widgets()
+if __name__ == "__main__" or widget_exists("earliest"):
+    earliest, latest = get_time_range_from_widgets(default_hours=30*24)
     display(spikes_in_admin_activity(
         earliest=dbutils.widgets.get("earliest"),
         latest=dbutils.widgets.get("latest"),

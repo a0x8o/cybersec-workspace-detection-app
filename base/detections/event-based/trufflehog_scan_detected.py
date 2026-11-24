@@ -9,7 +9,7 @@
 # MAGIC   author: david.veuve
 # MAGIC   created: '2025-08-14T12:00:00'
 # MAGIC   modified: '2025-08-14T12:00:00'
-# MAGIC   uuid: 8f4e5c9d-3b3b-5f7f-9c6d-2b0f8e4c5d9g
+# MAGIC   uuid: 56617dee-c2ec-4d6c-9625-a7578378012a
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: TruffleHog Scan Detected
@@ -66,7 +66,7 @@ def trufflehog_scan_detected(earliest: str = None, latest: str = None):
     
     # Filter for TruffleHog user agent within the time range
     df_filtered = df.filter(
-        (col("event_time").between(earliest, latest)) &
+        window_filter(earliest, latest) &
         (col("user_agent").like("%TruffleHog%"))
     )
     
@@ -83,7 +83,7 @@ def trufflehog_scan_detected(earliest: str = None, latest: str = None):
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(trufflehog_scan_detected(
         earliest=dbutils.widgets.get("earliest"),

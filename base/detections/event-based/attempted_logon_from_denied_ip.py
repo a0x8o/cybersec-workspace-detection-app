@@ -95,7 +95,7 @@ def attempted_logon_from_denied_ip(earliest:str = None, latest: str = None, igno
         (col("action_name").isin("IpAccessDenied")) &
         (~F.col("user_agent").rlike(known_ua_regex)) &
         (~col("request_params.path").rlike(excluded_paths_regex)) &
-        (col("event_time") >= earliest) & (col("event_time") <= latest)
+        window_filter(earliest, latest)
     ).select(
         to_timestamp(col("event_time")).alias("EVENT_DATE"),
         col("action_name").alias("ACTION"),
@@ -113,7 +113,7 @@ def attempted_logon_from_denied_ip(earliest:str = None, latest: str = None, igno
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(attempted_logon_from_denied_ip(
         earliest=dbutils.widgets.get("earliest"),

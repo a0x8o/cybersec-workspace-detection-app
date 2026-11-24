@@ -70,7 +70,7 @@ def verbose_audit_disabled(earliest:str = None, latest: str = None):
         (col("action_name").isin("workspaceConfEdit")) &
         (col("request_params").getItem("workspaceConfKeys") == "enableVerboseAuditLogs") &
         (col("request_params").getItem("workspaceConfValues") == "false") &
-        (col("event_time") >= earliest) & (col("event_time") <= latest)
+        window_filter(earliest, latest)
     ).select(
         to_timestamp(col("event_time")).alias("EVENT_DATE"),
         col("action_name").alias("ACTION"),
@@ -87,7 +87,7 @@ def verbose_audit_disabled(earliest:str = None, latest: str = None):
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(verbose_audit_disabled(
         earliest=dbutils.widgets.get("earliest"),

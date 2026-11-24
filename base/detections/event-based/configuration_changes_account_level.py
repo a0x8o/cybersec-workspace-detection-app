@@ -9,7 +9,7 @@
 # MAGIC   author: David Veuve - Databricks
 # MAGIC   created: '2025-06-04T12:00:00'
 # MAGIC   modified: '2025-06-04T12:00:00'
-# MAGIC   uuid: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+# MAGIC   uuid: 1f45a101-6a0e-47a7-bc09-7158004c38ba
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Account Level Configuration Changes
@@ -78,7 +78,7 @@ def configuration_changes_account_level(earliest: str = None, latest: str = None
     df_filtered = df.filter(
         (col("audit_level") == "ACCOUNT_LEVEL") &
         (col("action_name") == "setSetting") &
-        (col("event_time").between(earliest, latest))
+        window_filter(earliest, latest)
     ).select(
         to_timestamp(col("event_time")).alias("EVENT_TIME"),
         col("service_name").alias("SERVICE_NAME"),
@@ -98,7 +98,7 @@ def configuration_changes_account_level(earliest: str = None, latest: str = None
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(configuration_changes_account_level(
         earliest=dbutils.widgets.get("earliest"),

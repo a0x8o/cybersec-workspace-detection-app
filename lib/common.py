@@ -1,9 +1,8 @@
 # Databricks notebook source
-# MAGIC %pip install geoip2 netaddr --quiet
+# MAGIC %pip install geoip2==4.8.0 netaddr==1.3.0 --quiet
 
 # COMMAND ----------
 
-from pyspark import SparkFiles, SparkContext
 import geoip2.errors
 from geoip2 import database
 import os
@@ -252,7 +251,7 @@ class MaxMindEnrichmentBase(PandasFunctionEnrichmentBase):
         skip_cond = (cl.isNull() | (cl == "") | (~F.contains(cl, F.lit(".")) & ~F.contains(cl, F.lit(":"))) |
                      F.startswith(cl, F.lit("127.")) | F.startswith(cl, F.lit("192.168.")) |
                      F.startswith(cl, F.lit("10.")) | F.startswith(cl, F.lit("169.254.")) |
-                     generate_ip_range_condition(cl, "172.{}.)", 16, 31))
+                     generate_ip_range_condition(cl, "172.{}.", 16, 31))
         new_cl = (F.when(skip_cond, F.lit(None).cast(self.__type__for_null__())).otherwise(
             self.create_pandas_udf_function()(cl))).alias(alias)
 
@@ -329,9 +328,12 @@ class ASNEnrichment(MaxMindEnrichmentBase):
 # MAGIC
 # MAGIC **Option 1: Spark Config (Recommended - Cluster-wide)**
 # MAGIC ```python
-# MAGIC spark.conf.set("spark.databricks.geoip.city.path", "/Volumes/catalog/schema/geoip/GeoLite2_City.mmdb")
-# MAGIC spark.conf.set("spark.databricks.geoip.asn.path", "/Volumes/catalog/schema/geoip/GeoLite2_ASN.mmdb")
+# MAGIC spark.conf.set("custom.geoip.city.path", "/Volumes/catalog/schema/geoip/GeoLite2_City.mmdb")
+# MAGIC spark.conf.set("custom.geoip.asn.path", "/Volumes/catalog/schema/geoip/GeoLite2_ASN.mmdb")
 # MAGIC ```
+# MAGIC
+# MAGIC **Note:** do NOT use a `spark.databricks.*` key for this - that namespace is
+# MAGIC reserved by Databricks and user-defined keys there are rejected.
 # MAGIC
 # MAGIC **Option 2: Widget (Per-notebook)**
 # MAGIC ```python
@@ -354,7 +356,7 @@ def get_geoip_db_path(db_type='city'):
         Path to database file in Volume, or None if not configured
     """
     widget_name = f"geoip_{db_type}_db_path"
-    config_key = f"spark.databricks.geoip.{db_type}.path"
+    config_key = f"custom.geoip.{db_type}.path"
 
     # Try widget first
     try:
@@ -409,8 +411,8 @@ if not city_db_path and not asn_db_path:
 
 import functools
 from enum import Enum
-import uuid
-from pyspark.sql.functions import col, lit, to_timestamp, to_json, struct, current_timestamp
+from pyspark.sql.functions import (col, lit, to_timestamp, to_json, struct,
+                                   current_timestamp, sha2, coalesce)
 from pyspark.sql.types import StructType, StructField, StringType, TimestampType
 from delta.tables import DeltaTable
 
@@ -428,23 +430,56 @@ alerts_schema = StructType([
     StructField("event_data", StringType(), True)  # JSON string
 ])
 
+def _first_existing(df, *names):
+    """Return a Column for the first column name (case-insensitive) present in df."""
+    lowered = {c.lower(): c for c in df.columns}
+    for name in names:
+        if name.lower() in lowered:
+            return col(lowered[name.lower()])
+    return lit(None)
+
 def _alerts_df(df):
+    """Transform a detection result DataFrame into the standard alert schema.
+
+    alert_id is a deterministic SHA-256 hash of the full event payload, so
+    re-running a detection over an overlapping window produces the same id and
+    the Delta merge in _write_alerts deduplicates it.
+
+    Column resolution is tolerant: detection outputs use different names for
+    the same fields (EVENT_DATE vs START_TIME, SRC_USER vs USER_EMAIL, ...).
+    """
+    event_data = to_json(struct([col(c) for c in df.columns]))
     alerts_df = df.select(
-        lit(str(uuid.uuid4())).alias("alert_id"),
+        sha2(event_data, 256).alias("alert_id"),
         current_timestamp().alias("alertTime"),
-        to_timestamp(col("EVENT_DATE")).alias("eventTime"),
-        col("SRC_USER").alias("user_email"),
-        col("ACTION").alias("event_type"),
-        col("SRC_IP").alias("source_ip"),
-        to_json(struct([col(c) for c in df.columns])).alias("event_data")
-        ).na.fill({"user_email": "unknown", "source_ip": "unknown"}
-    )
-    
+        to_timestamp(_first_existing(df, "EVENT_DATE", "EVENT_TIME", "START_TIME")).alias("eventTime"),
+        _first_existing(df, "SRC_USER", "USER_EMAIL", "EXECUTED_AS").cast("string").alias("user_email"),
+        coalesce(_first_existing(df, "ACTION", "ACTION_NAME", "STATEMENT_TEXT"),
+                 lit("unknown")).alias("event_type"),
+        _first_existing(df, "SRC_IP", "SOURCE_IP_ADDRESS").cast("string").alias("source_ip"),
+        event_data.alias("event_data")
+    ).na.fill({"user_email": "unknown", "source_ip": "unknown"})
+
     return alerts_df
 
 def _write_alerts(df, alerts_table_path: str):
-    
-    delta_table = DeltaTable.forPath(spark, alerts_table_path)
+    """Merge alerts into a Delta table, creating it if needed.
+
+    Dedup is keyed on alert_id, which is a stable hash of the event payload -
+    see _alerts_df. Accepts either a UC table name or a Delta path.
+    """
+    if "/" not in alerts_table_path:
+        exists = spark.catalog.tableExists(alerts_table_path)
+        if not exists:
+            df.write.format("delta").saveAsTable(alerts_table_path)
+            return
+        delta_table = DeltaTable.forName(spark, alerts_table_path)
+    else:
+        if not DeltaTable.isDeltaTable(spark, alerts_table_path):
+            df.write.format("delta").save(alerts_table_path)
+            return
+        delta_table = DeltaTable.forPath(spark, alerts_table_path)
+
     delta_table.alias("target").merge(
         df.alias("source"),
         "target.alert_id = source.alert_id"
@@ -452,7 +487,7 @@ def _write_alerts(df, alerts_table_path: str):
     return
 
 
-def detect(func=None, *, output=None, columns=None, arg=None):
+def detect(func=None, *, output=None, columns=None, arg=None, alerts_table=None):
     """Decorator function with arguments
     Decorator can be used with or without arguments
     Examples:
@@ -461,32 +496,61 @@ def detect(func=None, *, output=None, columns=None, arg=None):
         >>> def func():
         >>>     pass
         >>>
-        >>> @detect(arg='foo')
+        >>> @detect(output=Output.asAlert, alerts_table="catalog.schema.alerts")
         >>> def func():
         >>>     pass
         >>>
+
+    With output=Output.asAlert the result is transformed into the alert schema.
+    If alerts_table is set (or the DETECTION_ALERTS_TABLE env var is set), the
+    alert rows are also merged into that Delta table with dedup on alert_id.
     """
     # 1. Decorator arguments are applied to itself as partial arguments
     if func is None:
-        return functools.partial(detect, output=output, columns=columns, arg=arg)
+        return functools.partial(detect, output=output, columns=columns, arg=arg,
+                                 alerts_table=alerts_table)
 
     # 2. logic with the arguments
- 
+
     # 3. Handles the actual decorating
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
-        # Write decorator function logic here
-        # Before function call
-        # ...
         result = func(*args, **kwargs)
-        # After function call
-        # ...
         if output == Output.asAlert:
             result = _alerts_df(result)
-    
+            sink = alerts_table or os.environ.get("DETECTION_ALERTS_TABLE")
+            if sink:
+                _write_alerts(result, sink)
 
         return result
     return wrapper
+
+
+def _ts(v):
+    """Normalize a string literal or Column to a timestamp Column."""
+    return F.lit(v) if isinstance(v, str) else v
+
+
+def window_filter(earliest, latest, time_col="event_time", date_col="event_date"):
+    """Time-range filter that includes the date partition key.
+
+    system.access.audit and system.query.history are partitioned by event_date;
+    filtering only on the timestamp column forces a full-table scan. Always use
+    this helper (or an equivalent event_date predicate) for time filtering.
+    Accepts string timestamps or Column expressions.
+    """
+    e, l = _ts(earliest), _ts(latest)
+    return (F.col(date_col).between(F.to_date(e), F.to_date(l)) &
+            F.col(time_col).between(e, l))
+
+
+def widget_exists(name: str) -> bool:
+    """True if a notebook widget exists - dbutils.widgets.get raises on missing."""
+    try:
+        dbutils.widgets.get(name)
+        return True
+    except Exception:
+        return False
 
 from datetime import datetime, timedelta, timezone
 
@@ -523,9 +587,11 @@ def run_all_detections(
     workspace_dir: str = None,
     earliest: str = None,
     latest: str = None,
-    notebook_filter: str = None
+    notebook_filter: str = None,
+    max_workers: int = 4
 ):
     import re
+    from concurrent.futures import ThreadPoolExecutor
     from databricks.sdk import WorkspaceClient
 
     if not earliest or not latest:
@@ -577,15 +643,18 @@ def run_all_detections(
         pattern = re.compile(notebook_filter)
         notebook_paths = [n for n in notebook_paths if pattern.search(n)]
 
-    for full_path in notebook_paths:
+    def _run_one(full_path):
         # Remove file extension for notebook.run
         run_path = re.sub(r'\.(py|ipynb)$', '', full_path)
-
         try:
             dbutils.notebook.run(run_path, 3600, arguments={
                 "earliest": earliest,
                 "latest": latest
             })
-
         except Exception as e:
             print(f"Failed to run {run_path}: {e}")
+
+    # Parallel notebook.run via a thread pool is a documented Databricks pattern;
+    # each detection scans its own slice of the audit table independently.
+    with ThreadPoolExecutor(max_workers=max(1, max_workers)) as pool:
+        list(pool.map(_run_one, notebook_paths))

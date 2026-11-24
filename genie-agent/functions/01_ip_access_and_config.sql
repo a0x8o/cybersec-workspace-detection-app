@@ -113,7 +113,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.service_name = 'accounts'
     AND a.action_name IN ('createIpAccessList', 'updateIpAccessList', 'deleteIpAccessList')
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- -----------------------------------------------------------------------------
 -- Account-level IP ACL validation failures.
@@ -157,6 +158,7 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.action_name = 'accountIpAclsValidationFailed'
     AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
   GROUP BY COALESCE(a.user_identity.email, a.request_params['user']),
            a.request_params['sourceIpAddress'];
 
@@ -217,6 +219,7 @@ RETURN
     a.request_params
   FROM system.access.audit AS a
   WHERE a.event_time BETWEEN start_time AND end_time
+  AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
     AND (
       (a.service_name = 'workspace'
         AND a.action_name = 'workspaceConfEdit'
@@ -276,7 +279,8 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.audit_level = 'ACCOUNT_LEVEL'
     AND a.action_name = 'setSetting'
-    AND a.event_time BETWEEN start_time AND end_time;
+    AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE);
 
 -- -----------------------------------------------------------------------------
 -- Login attempts blocked by an IP access list.
@@ -319,5 +323,6 @@ RETURN
   FROM system.access.audit AS a
   WHERE a.action_name = 'IpAccessDenied'
     AND a.event_time BETWEEN start_time AND end_time
+    AND a.event_date BETWEEN CAST(start_time AS DATE) AND CAST(end_time AS DATE)
   GROUP BY COALESCE(a.user_identity.email, a.request_params['user']),
            a.source_ip_address;

@@ -9,7 +9,7 @@
 # MAGIC   author: Kotaiba Alachkar
 # MAGIC   created: '2026-02-06T12:00:00'
 # MAGIC   modified: '2026-02-06T12:00:00'
-# MAGIC   uuid: 1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d
+# MAGIC   uuid: 2f8812bc-3c6d-48ae-b53c-35d8be45c22a
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Account Admin Privileged Role Assignment
@@ -102,8 +102,7 @@
 @detect(output=Output.asDataFrame)
 def account_admin_privileged_role_assignment(earliest: str = None, latest: str = None, admin_groups: str = ""):
     from pyspark.sql.functions import (col, current_timestamp, expr, to_timestamp,
-                                       lit, coalesce, when, struct, to_json)
-    import uuid
+                                       lit, coalesce, when, struct, to_json, sha2)
 
     earliest = earliest or current_timestamp() - expr("INTERVAL 24 hours")
     latest = latest or current_timestamp()
@@ -121,7 +120,7 @@ def account_admin_privileged_role_assignment(earliest: str = None, latest: str =
     df = spark.table("system.access.audit")
 
     df_direct = df.filter(
-        (col("event_time").between(earliest, latest)) &
+        window_filter(earliest, latest) &
         (col("service_name") == "accounts") &
         (col("action_name").isin(direct_admin_actions))
     )
@@ -158,7 +157,7 @@ def account_admin_privileged_role_assignment(earliest: str = None, latest: str =
         expanded_group_list = list(set(group_list + child_groups))
 
         df_group_additions = df.filter(
-            (col("event_time").between(earliest, latest)) &
+            window_filter(earliest, latest) &
             (col("service_name") == "accounts") &
             (col("action_name").isin(group_membership_actions)) &
             (col("request_params.targetGroupName").isin(expanded_group_list))
@@ -169,7 +168,7 @@ def account_admin_privileged_role_assignment(earliest: str = None, latest: str =
         # No admin groups configured — capture all account-level group membership
         # events for manual triage rather than silently dropping them.
         df_all_group_additions = df.filter(
-            (col("event_time").between(earliest, latest)) &
+            window_filter(earliest, latest) &
             (col("service_name") == "accounts") &
             (col("action_name").isin(group_membership_actions))
         )
@@ -203,7 +202,8 @@ def account_admin_privileged_role_assignment(earliest: str = None, latest: str =
     )
 
     df_alert = df_detailed.select(
-        lit(str(uuid.uuid4())).alias("alert_id"),
+        # Deterministic alert id: same event -> same id across reruns (enables merge dedup)
+        sha2(to_json(struct([col(c) for c in df_detailed.columns])), 256).alias("alert_id"),
         current_timestamp().alias("alertTime"),
         col("EVENT_DATE").alias("eventTime"),
         col("SRC_USER").alias("src_user"),
@@ -220,7 +220,7 @@ def account_admin_privileged_role_assignment(earliest: str = None, latest: str =
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     dbutils.widgets.text("admin_groups", "admins", "Account Admin Groups (comma-separated)")
 

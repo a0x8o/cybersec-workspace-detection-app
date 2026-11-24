@@ -67,7 +67,7 @@ def group_deleted(earliest:str = None, latest: str = None):
     df_filtered = df.filter(
         (col("service_name") == "accounts") &
         col("action_name").isin("removeGroup") &
-        (col("event_time") >= earliest) & (col("event_time") <= latest), 
+        window_filter(earliest, latest), 
     ).select(
         col("event_time").alias("EVENT_DATE"),
         col("action_name").alias("ACTION"),
@@ -86,7 +86,7 @@ def group_deleted(earliest:str = None, latest: str = None):
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(group_deleted(
         earliest=dbutils.widgets.get("earliest"),

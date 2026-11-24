@@ -9,7 +9,7 @@
 # MAGIC   author: Derek King - Databricks
 # MAGIC   created: '2025-05-09T12:56:50'
 # MAGIC   modified: '2025-05-09T12:56:50'
-# MAGIC   uuid: 5f9ae8gc-6gch-535d-aa0f-33f7fgcc6556
+# MAGIC   uuid: e27dd847-ea56-4abb-bce1-65aa2a10b5e3
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: High Priority Configuration Changes
@@ -76,7 +76,7 @@ def configuration_changes_high_priority(earliest:str = None, latest: str = None)
 
     # Filter for high-priority configuration changes
     df_filtered = df.filter(
-        (col("event_time") >= earliest) & (col("event_time") <= latest) &
+        window_filter(earliest, latest) &
         (
             # Verbose audit logging configuration changes
             (
@@ -136,7 +136,7 @@ def configuration_changes_high_priority(earliest:str = None, latest: str = None)
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(configuration_changes_high_priority(
         earliest=dbutils.widgets.get("earliest"),

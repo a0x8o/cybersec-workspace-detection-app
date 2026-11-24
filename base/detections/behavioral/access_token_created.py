@@ -81,7 +81,7 @@ def access_token_created(earliest:str = None, latest: str = None):
         (col("action_name").isin("generateDbToken")) &
         (~col("user_agent").rlike(known_ua_regex)) &
         (~col("source_ip_address").rlike(known_src_ips_regex)) &
-        (col("event_time").between(earliest, latest))
+        window_filter(earliest, latest)
     ).withColumn(
         "TOKEN_LIFETIME_DAYS",
         round(((unix_timestamp(from_unixtime(col("request_params.tokenExpirationTime") / 1000)) - unix_timestamp(col("event_time"))) / 3600 / 24),0)
@@ -105,8 +105,8 @@ def access_token_created(earliest:str = None, latest: str = None):
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
-    earliest, latest = get_time_range_from_widgets()
+if __name__ == "__main__" or widget_exists("earliest"):
+    earliest, latest = get_time_range_from_widgets(default_hours=30*24)
     display(access_token_created(
         earliest=dbutils.widgets.get("earliest"),
         latest=dbutils.widgets.get("latest")

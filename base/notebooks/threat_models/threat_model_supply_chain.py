@@ -27,7 +27,7 @@ dbutils.widgets.text("binary_time_range_hours", "24", "Binary Window (hours)")
 
 # COMMAND ----------
 
-# MAGIC %pip install pyyaml
+# MAGIC %pip install pyyaml==6.0.2
 
 # COMMAND ----------
 

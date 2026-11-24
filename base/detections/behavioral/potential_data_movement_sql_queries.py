@@ -9,7 +9,7 @@
 # MAGIC   author: David Veuve - Databricks
 # MAGIC   created: '2025-06-04T12:00:00'
 # MAGIC   modified: '2025-06-04T12:00:00'
-# MAGIC   uuid: 9b5e6f7a-2c3d-4b4e-8f9a-6c7e8d2f4a3b
+# MAGIC   uuid: 6b2b7e8c-2252-496f-8969-32577a59a078
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Potential Data Movement Commands with SQL Queries
@@ -71,7 +71,7 @@ def potential_data_movement_sql_queries(earliest: str = None, latest: str = None
     
     # Base filter for time range and COPY INTO with CREDENTIALS
     df_filtered = df.filter(
-        (col("start_time").between(earliest, latest)) &
+        window_filter(earliest, latest, time_col="start_time") &
         (upper(col("statement_text")).contains("COPY INTO")) &
         (upper(col("statement_text")).contains("CREDENTIALS")) &
         (~upper(col("statement_text")).contains("COPY INTO\\%CREDENTIALS%"))  # Exclude escaped patterns
@@ -97,8 +97,8 @@ def potential_data_movement_sql_queries(earliest: str = None, latest: str = None
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
-    earliest, latest = get_time_range_from_widgets()
+if __name__ == "__main__" or widget_exists("earliest"):
+    earliest, latest = get_time_range_from_widgets(default_hours=30*24)
     display(potential_data_movement_sql_queries(
         earliest=dbutils.widgets.get("earliest"),
         latest=dbutils.widgets.get("latest")

@@ -1,0 +1,209 @@
+bundle:
+  name: cybersec-workspace-detection-app
+
+# Deploy notebooks + shared libs into the workspace so %run paths keep working.
+sync:
+  include:
+    - base/**
+    - lib/**
+    - genie-agent/**
+
+# Deployment is paused by default; set schedule pause_status to UNPAUSED (or
+# resume in the Jobs UI) and set a notification destination before going live.
+targets:
+  dev:
+    mode: development
+    default: true
+  prod:
+    mode: production
+
+resources:
+  jobs:
+    security_detections_event_based:
+      name: "Security Detections - Event-Based"
+      description: >-
+        16 high-confidence detections over system.access.audit. Runs every 6
+        hours with a 24-hour lookback, so late-arriving audit events are still
+        caught (window overlap) and deduplicated by alert_id.
+      schedule:
+        quartz_cron_expression: "0 0 */6 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      queue:
+        enabled: true
+      max_concurrent_runs: 1
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+            dependencies:
+              - geoip2==4.8.0
+              - netaddr==1.3.0
+              - pyyaml
+      tasks:
+        - task_key: account_admin_privileged_role_assignment
+          notebook_task:
+            notebook_path: ./base/detections/event-based/account_admin_privileged_role_assignment.py
+          environment_key: default
+        - task_key: attempted_logon_from_denied_ip
+          notebook_task:
+            notebook_path: ./base/detections/event-based/attempted_logon_from_denied_ip.py
+          environment_key: default
+        - task_key: configuration_changes_account_level
+          notebook_task:
+            notebook_path: ./base/detections/event-based/configuration_changes_account_level.py
+          environment_key: default
+        - task_key: configuration_changes_high_priority
+          notebook_task:
+            notebook_path: ./base/detections/event-based/configuration_changes_high_priority.py
+          environment_key: default
+        - task_key: configuration_changes_workspace_level
+          notebook_task:
+            notebook_path: ./base/detections/event-based/configuration_changes_workspace_level.py
+          environment_key: default
+        - task_key: databricks_employee_logon
+          notebook_task:
+            notebook_path: ./base/detections/event-based/databricks_employee_logon.py
+          environment_key: default
+        - task_key: group_deleted
+          notebook_task:
+            notebook_path: ./base/detections/event-based/group_deleted.py
+          environment_key: default
+        - task_key: metastore_admin_privilege_granted
+          notebook_task:
+            notebook_path: ./base/detections/event-based/metastore_admin_privilege_granted.py
+          environment_key: default
+        - task_key: principal_removed_from_group
+          notebook_task:
+            notebook_path: ./base/detections/event-based/principal_removed_from_group.py
+          environment_key: default
+        - task_key: sso_config_changed
+          notebook_task:
+            notebook_path: ./base/detections/event-based/sso_config_changed.py
+          environment_key: default
+        - task_key: trufflehog_scan_detected
+          notebook_task:
+            notebook_path: ./base/detections/event-based/trufflehog_scan_detected.py
+          environment_key: default
+        - task_key: user_account_deleted
+          notebook_task:
+            notebook_path: ./base/detections/event-based/user_account_deleted.py
+          environment_key: default
+        - task_key: user_admin_account_change
+          notebook_task:
+            notebook_path: ./base/detections/event-based/user_admin_account_change.py
+          environment_key: default
+        - task_key: user_role_modified
+          notebook_task:
+            notebook_path: ./base/detections/event-based/user_role_modified.py
+          environment_key: default
+        - task_key: verbose_audit_logging_disabled
+          notebook_task:
+            notebook_path: ./base/detections/event-based/verbose_audit_logging_disabled.py
+          environment_key: default
+        - task_key: workspace_admin_privileged_role_assignment
+          notebook_task:
+            notebook_path: ./base/detections/event-based/workspace_admin_privileged_role_assignment.py
+          environment_key: default
+
+    security_detections_behavioral:
+      name: "Security Detections - Behavioral"
+      description: >-
+        20 behavioral detections over system.access.audit and
+        system.query.history. Runs daily with a 30-day lookback.
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      queue:
+        enabled: true
+      max_concurrent_runs: 1
+      environments:
+        - environment_key: default
+          spec:
+            client: "1"
+            dependencies:
+              - geoip2==4.8.0
+              - netaddr==1.3.0
+              - pyyaml
+      tasks:
+        - task_key: access_token_created
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/access_token_created.py
+          environment_key: default
+        - task_key: access_token_deleted
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/access_token_deleted.py
+          environment_key: default
+        - task_key: bulk_notebook_export
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/bulk_notebook_export.py
+          environment_key: default
+        - task_key: encoded_command_execution
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/encoded_command_execution.py
+          environment_key: default
+        - task_key: group_created
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/group_created.py
+          environment_key: default
+        - task_key: mfa_key_added
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/mfa_key_added.py
+          environment_key: default
+        - task_key: mfa_key_deleted
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/mfa_key_deleted.py
+          environment_key: default
+        - task_key: non_sso_login_detected
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/non_sso_login_detected.py
+          environment_key: default
+        - task_key: potential_data_movement_explicit_creds
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/potential_data_movement_explicit_creds.py
+          environment_key: default
+        - task_key: potential_data_movement_sql_queries
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/potential_data_movement_sql_queries.py
+          environment_key: default
+        - task_key: potential_data_movement_workspace_downloads
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/potential_data_movement_workspace_downloads.py
+          environment_key: default
+        - task_key: principal_added_to_group
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/principal_added_to_group.py
+          environment_key: default
+        - task_key: secret_scanning_activity
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/secret_scanning_activity.py
+          environment_key: default
+        - task_key: session_hijacking_frequent_logins
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/session_hijacking_frequent_logins.py
+          environment_key: default
+        - task_key: session_hijacking_multi_device
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/session_hijacking_multi_device.py
+          environment_key: default
+        - task_key: session_hijacking_session_count
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/session_hijacking_session_count.py
+          environment_key: default
+        - task_key: spike_in_table_admin_activity
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/spike_in_table_admin_activity.py
+          environment_key: default
+        - task_key: token_scanning_activity
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/token_scanning_activity.py
+          environment_key: default
+        - task_key: user_account_created
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/user_account_created.py
+          environment_key: default
+        - task_key: user_password_changed
+          notebook_task:
+            notebook_path: ./base/detections/behavioral/user_password_changed.py
+          environment_key: default

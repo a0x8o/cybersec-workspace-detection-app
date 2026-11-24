@@ -18,7 +18,11 @@ dbutils.widgets.text("time_range_days", "30", "Time Range (days)")
 
 # Get parameters
 user_email = dbutils.widgets.get("user_email")
-time_range_days = int(dbutils.widgets.get("time_range_days"))
+try:
+    time_range_days = int(dbutils.widgets.get("time_range_days"))
+except (ValueError, TypeError):
+    raise ValueError("time_range_days must be a valid integer, "
+                     f"got: {dbutils.widgets.get('time_range_days')!r}")
 
 if not user_email:
     raise ValueError("Please provide a user email address")
@@ -36,7 +40,7 @@ print()
 
 # COMMAND ----------
 
-# MAGIC %pip install pyyaml
+# MAGIC %pip install pyyaml==6.0.2
 
 # COMMAND ----------
 

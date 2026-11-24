@@ -9,7 +9,7 @@
 # MAGIC   author: David Veuve - Databricks
 # MAGIC   created: '2025-06-04T12:00:00'
 # MAGIC   modified: '2025-06-04T12:00:00'
-# MAGIC   uuid: 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f
+# MAGIC   uuid: 15c5da2b-75c8-4533-afb5-cdafe6ef32b9
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Potential Data Movement via Workspace Downloads
@@ -86,7 +86,7 @@ def potential_data_movement_workspace_downloads(earliest: str = None, latest: st
     
     # Filter for various download/export activities that could indicate data exfiltration
     df_filtered = df.filter(
-        (col("event_time").between(earliest, latest)) &
+        window_filter(earliest, latest) &
         (
             # Direct download actions
             (col("action_name").isin(direct_download_actions)) |
@@ -115,8 +115,8 @@ def potential_data_movement_workspace_downloads(earliest: str = None, latest: st
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
-    earliest, latest = get_time_range_from_widgets()
+if __name__ == "__main__" or widget_exists("earliest"):
+    earliest, latest = get_time_range_from_widgets(default_hours=30*24)
     display(potential_data_movement_workspace_downloads(
         earliest=dbutils.widgets.get("earliest"),
         latest=dbutils.widgets.get("latest")

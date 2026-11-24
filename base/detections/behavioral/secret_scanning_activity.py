@@ -9,7 +9,7 @@
 # MAGIC   author: David Veuve - Databricks
 # MAGIC   created: '2025-06-04T12:00:00'
 # MAGIC   modified: '2025-06-04T12:00:00'
-# MAGIC   uuid: 7f3e4b8c-9d2a-4f6e-8b5c-1a9e7d3b4c8f
+# MAGIC   uuid: 6b016ca0-9d4d-46ee-946b-b82bfa2cea10
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Secrets Discovery
@@ -75,7 +75,7 @@ def secret_scanning_activity(earliest: str = None, latest: str = None, scopes_th
     # Filter for secret-related actions within the time range
     df_filtered = df.filter(
         (col("action_name").isin("listScopes", "getSecret")) &
-        (col("event_time").between(earliest, latest))
+        window_filter(earliest, latest)
     )
     
     # Aggregate data by event_date, service_name, action_name, and user email
@@ -118,8 +118,8 @@ def secret_scanning_activity(earliest: str = None, latest: str = None, scopes_th
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
-    earliest, latest = get_time_range_from_widgets()
+if __name__ == "__main__" or widget_exists("earliest"):
+    earliest, latest = get_time_range_from_widgets(default_hours=30*24)
     display(secret_scanning_activity(
         earliest=dbutils.widgets.get("earliest"),
         latest=dbutils.widgets.get("latest")

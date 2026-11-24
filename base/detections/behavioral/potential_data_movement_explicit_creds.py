@@ -9,7 +9,7 @@
 # MAGIC   author: David Veuve - Databricks
 # MAGIC   created: '2025-06-04T12:00:00'
 # MAGIC   modified: '2025-06-04T12:00:00'
-# MAGIC   uuid: 8a4f5c6d-1e2b-4a3c-9f8e-7b5d9a1c3e2f
+# MAGIC   uuid: a5a5470c-502d-4131-a4da-f4f1da969fec
 # MAGIC   content_type: detection
 # MAGIC   detection:
 # MAGIC     name: Potential Data Movement Commands with Explicit Credentials
@@ -84,7 +84,7 @@ def potential_data_movement_explicit_creds(earliest: str = None, latest: str = N
     # Filter for data movement actions with potential explicit credentials
     df_filtered = df.filter(
         (col("action_name").isin(suspicious_actions)) &
-        (col("event_time").between(earliest, latest))
+        window_filter(earliest, latest)
     ).select(
         to_timestamp(col("event_time")).alias("EVENT_TIME"),
         col("service_name").alias("SERVICE_NAME"),
@@ -99,8 +99,8 @@ def potential_data_movement_explicit_creds(earliest: str = None, latest: str = N
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
-    earliest, latest = get_time_range_from_widgets()
+if __name__ == "__main__" or widget_exists("earliest"):
+    earliest, latest = get_time_range_from_widgets(default_hours=30*24)
     display(potential_data_movement_explicit_creds(
         earliest=dbutils.widgets.get("earliest"),
         latest=dbutils.widgets.get("latest")

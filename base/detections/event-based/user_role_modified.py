@@ -59,7 +59,7 @@ def user_role_modified(earliest:str = None, latest: str = None):
     df_filtered = df.select("event_time", "user_identity", "request_params", "action_name") \
     .where((col("service_name") == "accounts") &
            (col("action_name").isin("addUserToAdminGroup", "modifyUserRole")) &
-           (col("event_time").between(earliest, latest))) \
+           window_filter(earliest, latest)) \
     .orderBy(col("event_time").desc())
 
 
@@ -67,7 +67,7 @@ def user_role_modified(earliest:str = None, latest: str = None):
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(user_role_modified(
         earliest=dbutils.widgets.get("earliest"),

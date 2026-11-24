@@ -71,7 +71,7 @@ def databricks_employee_logon(earliest:str = None, latest: str = None):
             (col("request_params.authentication_method").isin("GENIE_AUTH"))) &
         (col("response.status_code") == 200) &
         (col("audit_level") == "WORKSPACE_LEVEL") &
-        (col("event_time") >= earliest) & (col("event_time") <= latest)
+        window_filter(earliest, latest)
     ).select(
         to_timestamp(col("event_time")).alias("EVENT_DATE"),
         col("action_name").alias("ACTION"),
@@ -88,7 +88,7 @@ def databricks_employee_logon(earliest:str = None, latest: str = None):
 
 # COMMAND ----------
 
-if __name__ == "__main__" or dbutils.widgets.get("earliest"):
+if __name__ == "__main__" or widget_exists("earliest"):
     earliest, latest = get_time_range_from_widgets()
     display(databricks_employee_logon(
         earliest=dbutils.widgets.get("earliest"),
